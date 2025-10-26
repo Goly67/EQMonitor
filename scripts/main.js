@@ -906,11 +906,6 @@ eventSource.onmessage = (event) => {
     }
 };
 
-
-/************************************************************************
- * GEOLOCATION FIXED FOR ANDROID + IPHONE (requires user interaction)
- ************************************************************************/
-
 /************************************************************************
  * Modern bottom-bar style “Enable My Location” for mobile browsers
  ************************************************************************/
@@ -922,14 +917,14 @@ function initLocationButton() {
   bar.id = "enableLocationBar";
   bar.innerHTML = `
     <div class="location-bar-content">
-      <span class="location-bar-text">Allow access to your location</span>
+      <span class="location-bar-text">Allow access to show your location</span>
       <button id="enableLocationBtn">Enable My Location</button>
     </div>
   `;
 
   document.body.appendChild(bar);
 
-  // Styling — looks like a mobile bottom nav bar
+  // Add styles
   const style = document.createElement("style");
   style.textContent = `
     #enableLocationBar {
@@ -947,6 +942,7 @@ function initLocationButton() {
       padding: 14px 10px;
       box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
       animation: slideUp 0.4s ease forwards;
+      font-family: "Inter", sans-serif;
     }
     .location-bar-content {
       width: 100%;
@@ -959,8 +955,8 @@ function initLocationButton() {
     }
     .location-bar-text {
       flex: 1;
-      font-size: 12px;
-      line-height: 1.3;
+      font-size: 0.9rem;
+      line-height: 1.4;
       color: #cbd5e1;
     }
     #enableLocationBtn {
@@ -968,10 +964,10 @@ function initLocationButton() {
       background: #00d4ff;
       color: #0a0e27;
       border: none;
-      padding: 10px 16px;
+      padding: 10px 18px;
       border-radius: 8px;
-      font-weight: 6100;
-      font-size: 10px;
+      font-weight: 600;
+      font-size: 0.85rem;
       cursor: pointer;
       transition: all 0.25s ease;
     }
@@ -979,6 +975,29 @@ function initLocationButton() {
       transform: scale(0.97);
       background: #00a9d6;
     }
+
+    /* RESPONSIVE STYLES */
+    @media (max-width: 768px) {
+      .location-bar-text {
+        font-size: 0.75rem;
+      }
+      #enableLocationBtn {
+        font-size: 0.75rem;
+        padding: 8px 14px;
+      }
+    }
+
+    /* MOBILE COMPACT VERSION (smaller phones) */
+    @media (max-width: 480px) {
+      .location-bar-text {
+        font-size: 0.7rem;
+        content: "Allow access to show your location";
+      }
+      #enableLocationBtn {
+        font-size: 0.7rem;
+      }
+    }
+
     @keyframes slideUp {
       from { transform: translateY(100%); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
@@ -990,6 +1009,13 @@ function initLocationButton() {
   `;
   document.head.appendChild(style);
 
+  // Adjust text/button for mobile in JS (content can’t be changed via CSS alone)
+  if (window.innerWidth <= 480) {
+    bar.querySelector(".location-bar-text").textContent = "Allow access to show your location";
+    bar.querySelector("#enableLocationBtn").textContent = "Enable";
+  }
+
+  // Button click handling
   const btn = document.getElementById("enableLocationBtn");
   btn.addEventListener("click", async () => {
     btn.disabled = true;
@@ -997,7 +1023,6 @@ function initLocationButton() {
     const success = await requestLocationPermission(true);
     if (success) {
       btn.textContent = "Location Enabled ✅";
-      // Slide away smoothly
       bar.style.animation = "slideDown 0.4s ease forwards";
       setTimeout(() => bar.remove(), 400);
     } else {
