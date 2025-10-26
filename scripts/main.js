@@ -908,60 +908,111 @@ let scaleUpdateTimeout = null;
 
 
     /************************************************************************
-     * GEOLOCATION WITH PERMISSION MEMORY
-     ************************************************************************/
-    function requestLocationPermission() {
-      return new Promise((resolve) => {
-        // Check if permission was previously granted
-        const savedPermission = localStorage.getItem('locationPermission');
-        
-        if (savedPermission === 'granted') {
-          // Permission was previously granted, use it directly
-          navigator.geolocation.getCurrentPosition(
-            pos => {
-              userLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-              addUserMarker();
-              resolve(true);
-            },
-            err => {
-              console.warn("Geolocation failed:", err);
-              resolve(false);
-            }
-          );
-        } else if (savedPermission === 'denied') {
-          // Permission was previously denied, skip
-          console.log("Location permission previously denied");
-          resolve(false);
-        } else {
-          // First time asking for permission
-          navigator.geolocation.getCurrentPosition(
-            pos => {
-              userLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-              localStorage.setItem('locationPermission', 'granted');
-              addUserMarker();
-              resolve(true);
-            },
-            err => {
-              console.warn("Geolocation failed:", err);
-              localStorage.setItem('locationPermission', 'denied');
-              resolve(false);
-            }
-          );
-        }
-      });
-    }
+ * GEOLOCATION WITH PERMISSION MEMORY — Android, iPhone, Desktop
+ ************************************************************************/
+async function requestLocationPermission() {
+  // Browser & HTTPS check
+  if (!("geolocation" in navigator)) {
+    console.warn("❌ Geolocation not supported on this device.");
+    return false;
+  }
+  if (location.protocol !== "https:" && location.hostname !== "localhost") {
+    alert("⚠️ Location access requires HTTPS. Please use a secure connection (https://).");
+    return false;
+  }
 
-    function addUserMarker() {
-      if (userMarker) map.removeLayer(userMarker);
-      userMarker = L.marker([userLocation.lat, userLocation.lon], {
-        title: "Your Location",
-        icon: L.icon({
-          iconUrl: 'https://cdn-icons-png.flaticon.com/512/535/535137.png',
-          iconSize: [30, 30],
-          iconAnchor: [15, 30]
-        })
-      }).addTo(map).bindPopup("You are here");
+  const savedPermission = localStorage.getItem("locationPermission");
+
+  // --- If browser supports Permissions API ---
+  try {
+    if (navigator.permissions) {
+      const perm = await navigator.permissions.query({ name: "geolocation" });
+
+      if (perm.state === "granted") {
+        console.log("📍 Permission already granted");
+        return getAndStoreUserLocation();
+      } else if (perm.state === "prompt") {
+        console.log("📍 Asking for location access...");
+        return getAndStoreUserLocation();
+      } else if (perm.state === "denied") {
+        console.warn("🚫 Location previously denied");
+        localStorage.setItem("locationPermission", "denied");
+        return false;
+      }
     }
+  } catch (e) {
+    console.warn("Permissions API not supported:", e);
+  }
+
+  // --- Fallback: Use saved memory or manual prompt ---
+  if (savedPermission === "granted") {
+    return getAndStoreUserLocation();
+  } else if (savedPermission === "denied") {
+    console.warn("🚫 Location permission previously denied");
+    return false;
+  } else {
+    return getAndStoreUserLocation(true);
+  }
+}
+
+/************************************************************************
+ * Helper: Actually request geolocation + update marker
+ ************************************************************************/
+function getAndStoreUserLocation(askAgain = false) {
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        userLocation = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
+        };
+
+        console.log("✅ Got user location:", userLocation);
+        localStorage.setItem("locationPermission", "granted");
+        addUserMarker();
+        resolve(true);
+      },
+      (err) => {
+        console.warn("⚠️ Geolocation error:", err);
+        localStorage.setItem("locationPermission", "denied");
+        alert(
+          "Unable to access location. Please enable location access in your browser settings."
+        );
+        resolve(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 10000,
+      }
+    );
+  });
+}
+
+/************************************************************************
+ * Adds a marker for the user's position
+ ************************************************************************/
+function addUserMarker() {
+  if (!userLocation) return;
+
+  if (userMarker) map.removeLayer(userMarker);
+
+  userMarker = L.marker([userLocation.lat, userLocation.lon], {
+    title: "Your Location",
+    icon: L.icon({
+      iconUrl: "https://cdn-icons-png.flaticon.com/512/535/535137.png",
+      iconSize: [30, 30],
+      iconAnchor: [15, 30],
+    }),
+  })
+    .addTo(map)
+    .bindPopup("📍 You are here")
+    .openPopup();
+
+  // Optional: auto center view on user
+  map.setView([userLocation.lat, userLocation.lon], 7);
+}
 
     /************************************************************************
      * INIT
