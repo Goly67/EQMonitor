@@ -959,7 +959,7 @@ function initLocationButton() {
     }
     .location-bar-text {
       flex: 1;
-      font-size: 14px;
+      font-size: 12px;
       line-height: 1.3;
       color: #cbd5e1;
     }
@@ -970,7 +970,8 @@ function initLocationButton() {
       border: none;
       padding: 10px 16px;
       border-radius: 8px;
-      font-weight: 600;
+      font-weight: 6100;
+      font-size: 10px;
       cursor: pointer;
       transition: all 0.25s ease;
     }
