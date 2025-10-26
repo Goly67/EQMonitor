@@ -908,27 +908,28 @@ eventSource.onmessage = (event) => {
 
 
 /************************************************************************
- * Elegant Bottom Navigation Bar — Enable My Location (Mobile only)
+ * GEOLOCATION FIXED FOR ANDROID + IPHONE (requires user interaction)
+ ************************************************************************/
+
+/************************************************************************
+ * Modern bottom-bar style “Enable My Location” for mobile browsers
  ************************************************************************/
 function initLocationButton() {
-  // Don’t show on desktop
-  if (window.innerWidth > 768) return;
+  // Prevent duplicates
   if (document.getElementById("enableLocationBar")) return;
 
   const bar = document.createElement("div");
   bar.id = "enableLocationBar";
   bar.innerHTML = `
-    <div class="location-bar-inner">
-      <div class="location-bar-text">
-        🌐 Allow access to your location<br>
-        <span class="location-subtext">to show nearby earthquakes in real-time</span>
-      </div>
-      <button id="enableLocationBtn">📍 Enable</button>
+    <div class="location-bar-content">
+      <span class="location-bar-text">Allow access to your location to show nearby earthquakes</span>
+      <button id="enableLocationBtn">📍 Enable My Location</button>
     </div>
   `;
+
   document.body.appendChild(bar);
 
-  // --- STYLING (modern, polished, gradient look) ---
+  // Styling — looks like a mobile bottom nav bar
   const style = document.createElement("style");
   style.textContent = `
     #enableLocationBar {
@@ -936,65 +937,51 @@ function initLocationButton() {
       bottom: 0;
       left: 0;
       right: 0;
-      width: 100%;
-      z-index: 5000;
-      background: linear-gradient(90deg, #0a0e27 0%, #151d3b 100%);
+      background: #0a0e27;
       border-top: 2px solid #00d4ff;
-      box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.6);
-      animation: slideUp 0.35s ease forwards;
-    }
-
-    .location-bar-inner {
-      max-width: 600px;
-      margin: 0 auto;
+      color: #e2e8f0;
+      z-index: 3000;
       display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 14px 10px;
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+      animation: slideUp 0.4s ease forwards;
+    }
+    .location-bar-content {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: row;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 20px;
-      gap: 12px;
+      gap: 10px;
     }
-
     .location-bar-text {
-      color: #e2e8f0;
-      font-size: 15px;
-      font-weight: 500;
+      flex: 1;
+      font-size: 14px;
       line-height: 1.3;
+      color: #cbd5e1;
     }
-
-    .location-subtext {
-      font-size: 13px;
-      color: #a5b4fc;
-      display: block;
-      margin-top: 2px;
-    }
-
     #enableLocationBtn {
-      background: linear-gradient(135deg, #00d4ff 0%, #00a9d6 100%);
-      border: none;
-      border-radius: 10px;
-      padding: 10px 18px;
+      flex-shrink: 0;
+      background: #00d4ff;
       color: #0a0e27;
-      font-weight: 700;
-      font-size: 15px;
-      box-shadow: 0 0 12px rgba(0, 212, 255, 0.6);
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 600;
       cursor: pointer;
       transition: all 0.25s ease;
     }
-
-    #enableLocationBtn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 0 16px rgba(0, 212, 255, 0.8);
-    }
-
     #enableLocationBtn:active {
       transform: scale(0.97);
+      background: #00a9d6;
     }
-
     @keyframes slideUp {
       from { transform: translateY(100%); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
-
     @keyframes slideDown {
       from { transform: translateY(0); opacity: 1; }
       to { transform: translateY(100%); opacity: 0; }
@@ -1002,19 +989,18 @@ function initLocationButton() {
   `;
   document.head.appendChild(style);
 
-  // --- INTERACTION ---
   const btn = document.getElementById("enableLocationBtn");
   btn.addEventListener("click", async () => {
     btn.disabled = true;
-    btn.textContent = "Requesting...";
+    btn.textContent = "Getting location...";
     const success = await requestLocationPermission(true);
-
     if (success) {
-      btn.textContent = "✅ Enabled";
+      btn.textContent = "Location Enabled ✅";
+      // Slide away smoothly
       bar.style.animation = "slideDown 0.4s ease forwards";
       setTimeout(() => bar.remove(), 400);
     } else {
-      btn.textContent = "❌ Denied";
+      btn.textContent = "Permission Denied ❌";
       setTimeout(() => {
         bar.style.animation = "slideDown 0.4s ease forwards";
         setTimeout(() => bar.remove(), 400);
