@@ -922,8 +922,8 @@ function initLocationButton() {
   bar.id = "enableLocationBar";
   bar.innerHTML = `
     <div class="location-bar-content">
-      <span class="location-bar-text">Allow access to your location to show nearby earthquakes</span>
-      <button id="enableLocationBtn">📍 Enable My Location</button>
+      <span class="location-bar-text">Allow access to your location</span>
+      <button id="enableLocationBtn">Enable My Location</button>
     </div>
   `;
 
