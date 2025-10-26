@@ -127,14 +127,14 @@ body {
 }
 
 .burger-menu-btn:hover {
-    color: #0099cc;
+    color: #ffffff;
     transform: scale(1.1);
 }
 
 .burger-line {
     width: 24px;
     height: 2px;
-    background: #00d4ff;
+    background: #ffffff;
     transition: all 0.3s ease;
     border-radius: 2px;
 }

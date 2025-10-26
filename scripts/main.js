@@ -932,8 +932,8 @@ function initLocationButton() {
       bottom: 0;
       left: 0;
       right: 0;
-      background: #0a0e27;
-      border-top: 2px solid #00d4ff;
+      background: linear-gradient(90deg, #151d3b 0%, #4e0707 100%);
+      border-top: 2px solid #ffffff70;
       color: #e2e8f0;
       z-index: 3000;
       display: flex;
@@ -955,14 +955,15 @@ function initLocationButton() {
     }
     .location-bar-text {
       flex: 1;
+      font-weight: 500;
       font-size: 0.9rem;
       line-height: 1.4;
-      color: #cbd5e1;
+      color: #ffffffff;
     }
     #enableLocationBtn {
       flex-shrink: 0;
-      background: #00d4ff;
-      color: #0a0e27;
+      background: #882121ff;
+      color: #ffffffff;
       border: none;
       padding: 10px 18px;
       border-radius: 8px;
@@ -973,7 +974,7 @@ function initLocationButton() {
     }
     #enableLocationBtn:active {
       transform: scale(0.97);
-      background: #00a9d6;
+      background: #ae2c2cff;
     }
 
     /* RESPONSIVE STYLES */
@@ -1022,11 +1023,11 @@ function initLocationButton() {
     btn.textContent = "Getting location...";
     const success = await requestLocationPermission(true);
     if (success) {
-      btn.textContent = "Location Enabled ✅";
+      btn.textContent = "Location Enabled";
       bar.style.animation = "slideDown 0.4s ease forwards";
       setTimeout(() => bar.remove(), 400);
     } else {
-      btn.textContent = "Permission Denied ❌";
+      btn.textContent = "Permission Denied";
       setTimeout(() => {
         bar.style.animation = "slideDown 0.4s ease forwards";
         setTimeout(() => bar.remove(), 400);
