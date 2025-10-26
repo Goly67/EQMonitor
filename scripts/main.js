@@ -918,7 +918,7 @@ function initLocationButton() {
   bar.innerHTML = `
     <div class="location-bar-content">
       <span class="location-bar-text">Allow access to show your location</span>
-      <button id="enableLocationBtn">Enable My Location</button>
+      <button id="enableLocationBtn">Enable Access to my Location</button>
     </div>
   `;
 
@@ -1013,7 +1013,7 @@ function initLocationButton() {
   // Adjust text/button for mobile in JS (content can’t be changed via CSS alone)
   if (window.innerWidth <= 480) {
     bar.querySelector(".location-bar-text").textContent = "Allow access to show your location";
-    bar.querySelector("#enableLocationBtn").textContent = "Enable";
+    bar.querySelector("#enableLocationBtn").textContent = "Enable Access";
   }
 
   // Button click handling
