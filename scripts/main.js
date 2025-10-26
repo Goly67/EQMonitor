@@ -911,39 +911,102 @@ eventSource.onmessage = (event) => {
  * GEOLOCATION FIXED FOR ANDROID + IPHONE (requires user interaction)
  ************************************************************************/
 
+/************************************************************************
+ * Modern bottom-bar style “Enable My Location” for mobile browsers
+ ************************************************************************/
 function initLocationButton() {
-    // Create a floating "Enable My Location" button
-    const btn = document.createElement("button");
-    btn.id = "enableLocationBtn";
-    btn.textContent = "📍 Enable My Location";
-    Object.assign(btn.style, {
-        position: "fixed",
-        bottom: "80px",
-        right: "20px",
-        zIndex: "2000",
-        padding: "10px 16px",
-        background: "#00d4ff",
-        color: "#0a0e27",
-        fontWeight: "600",
-        border: "none",
-        borderRadius: "10px",
-        boxShadow: "0 4px 10px rgba(0,0,0,0.3)",
-        cursor: "pointer"
-    });
-    document.body.appendChild(btn);
+  // Prevent duplicates
+  if (document.getElementById("enableLocationBar")) return;
 
-    btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        btn.textContent = "Getting location...";
-        const success = await requestLocationPermission(true);
-        if (success) {
-            btn.textContent = "Location Enabled ✅";
-            setTimeout(() => btn.remove(), 3000);
-        } else {
-            btn.textContent = "Permission Denied ❌";
-            setTimeout(() => btn.remove(), 4000);
-        }
-    });
+  const bar = document.createElement("div");
+  bar.id = "enableLocationBar";
+  bar.innerHTML = `
+    <div class="location-bar-content">
+      <span class="location-bar-text">Allow access to your location to show nearby earthquakes</span>
+      <button id="enableLocationBtn">📍 Enable My Location</button>
+    </div>
+  `;
+
+  document.body.appendChild(bar);
+
+  // Styling — looks like a mobile bottom nav bar
+  const style = document.createElement("style");
+  style.textContent = `
+    #enableLocationBar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #0a0e27;
+      border-top: 2px solid #00d4ff;
+      color: #e2e8f0;
+      z-index: 3000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 14px 10px;
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+      animation: slideUp 0.4s ease forwards;
+    }
+    .location-bar-content {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .location-bar-text {
+      flex: 1;
+      font-size: 14px;
+      line-height: 1.3;
+      color: #cbd5e1;
+    }
+    #enableLocationBtn {
+      flex-shrink: 0;
+      background: #00d4ff;
+      color: #0a0e27;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+    #enableLocationBtn:active {
+      transform: scale(0.97);
+      background: #00a9d6;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes slideDown {
+      from { transform: translateY(0); opacity: 1; }
+      to { transform: translateY(100%); opacity: 0; }
+    }
+  `;
+  document.head.appendChild(style);
+
+  const btn = document.getElementById("enableLocationBtn");
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Getting location...";
+    const success = await requestLocationPermission(true);
+    if (success) {
+      btn.textContent = "Location Enabled ✅";
+      // Slide away smoothly
+      bar.style.animation = "slideDown 0.4s ease forwards";
+      setTimeout(() => bar.remove(), 400);
+    } else {
+      btn.textContent = "Permission Denied ❌";
+      setTimeout(() => {
+        bar.style.animation = "slideDown 0.4s ease forwards";
+        setTimeout(() => bar.remove(), 400);
+      }, 2000);
+    }
+  });
 }
 
 /************************************************************************
