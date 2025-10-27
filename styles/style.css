@@ -760,6 +760,7 @@ input[type=range]::-moz-range-thumb {
      .control-panel {
         position: fixed;
         left: 2.5%;
+        top: 12%;
         transform: translate(-0%, 50%);
         width: calc(100% - 20px); /* ✅ 10px gap on both sides */
         max-width: calc(100% - 20px);
