@@ -1255,7 +1255,7 @@ function showBrowserBlocker(message) {
   blocker.style.left = 0;
   blocker.style.width = "100vw";
   blocker.style.height = "100vh";
-  blocker.style.background = "#0a0a0a";
+  blocker.style.background = "#500707ff";
   blocker.style.color = "#fff";
   blocker.style.display = "flex";
   blocker.style.flexDirection = "column";
@@ -1267,7 +1267,7 @@ function showBrowserBlocker(message) {
     <h2 style="font-size:1.5rem;margin-bottom:1rem;">Unsupported Browser</h2>
     <p style="max-width:80%;text-align:center;">
       ${message}<br><br>
-      Please open this page using <b>Chrome</b> or <b>Safari</b> for full functionality.
+      Please open this page using <b>Chrome</b> or <b>Safari</b> for full functionality. Please continue by copy pasting the link to any official web browsers.
     </p>
   `;
   document.body.innerHTML = ""; // clear existing content
