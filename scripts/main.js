@@ -311,13 +311,12 @@ function formatDateTime(dt) {
 /************************************************************************
  * MARKERS & ANIMATION
  ************************************************************************/
+
 function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
     if (!ev.lat || !ev.lon) return;
 
-    // ✅ Skip duplicates
     if (markers.has(ev.id)) return;
 
-    // If a new latest quake is coming in — revert the previous latest (triangle → circle)
     if (isLatest && latestMarker && latestMarker._eventId) {
         const prevData = markers.get(latestMarker._eventId)?.data;
         if (prevData) {
@@ -409,35 +408,34 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
         playQuakeSound(isNearby, ev.magnitude);
     }
 
-    if (isLatest && markerLayer) {
-        latestMarker = markerLayer;
+    if (isLatest) {
+    latestMarker = markerLayer;
 
-        // Animate and notify
-        animateLatestMarker(markerLayer);
-        showNotification(ev, markerLayer);
-        addRealShakeMapLayer();
+    // Animate, notify, shake map
+    animateLatestMarker(markerLayer);
+    showNotification(ev, markerLayer);
+    addRealShakeMapLayer();
 
-        // ✅ Bring the latest marker and its tooltip to the very front
-        setTimeout(() => {
-            try {
-                markerLayer.bringToFront();
-                const tooltip = markerLayer.getTooltip();
-                if (tooltip && tooltip._container) {
-                    tooltip._container.style.zIndex = 9999;
-                }
-
-                // Also raise its SVG element if using divIcon
-                const el = markerLayer.getElement?.();
-                if (el) {
-                    el.style.zIndex = 9999;
-                    el.style.position = "relative";
-                }
-            } catch (err) {
-                console.warn("Failed to bring latest marker to front:", err);
+    // ✅ Bring the latest marker and tooltip above all others
+    setTimeout(() => {
+        try {
+            markerLayer.bringToFront(); // Leaflet layer
+            const tooltip = markerLayer.getTooltip();
+            if (tooltip && tooltip._container) {
+                tooltip._container.style.zIndex = 9999; // tooltip front
             }
-        }, 200); // small delay to ensure Leaflet rendered it
-    }
 
+            // If using divIcon SVG (triangle), raise its z-index
+            const el = markerLayer.getElement?.();
+            if (el) {
+                el.style.zIndex = 9999;
+                el.style.position = "relative";
+            }
+        } catch (err) {
+            console.warn("Failed to bring latest marker to front:", err);
+        }
+    }, 50); // slight delay ensures Leaflet finished rendering
+}
 }
 
 
@@ -660,11 +658,11 @@ async function fetchNewEvents() {
 
         if (!events.length) return setStatus("No events in this range");
 
-        // ✅ Sort oldest first so latest is added last (on top)
-        events.sort((a, b) => new Date(a.time) - new Date(b.time));
+        // ✅ Always newest first
+        events.sort((a, b) => new Date(b.time) - new Date(a.time));
 
-        // 🧭 latest quake (now the last in the array after sorting)
-        const latest = events[events.length - 1];
+        // 🧭 latest quake
+        const latest = events[0];
 
         // Add all quakes, but only animate/sound the newest
         events.forEach(ev => addOrUpdateEventMarker(ev, ev.id === latest.id, ev.id === latest.id));
@@ -678,7 +676,6 @@ async function fetchNewEvents() {
         setStatus("Error fetching events: " + e.message);
     }
 }
-
 
 function limitMarkers() {
     const limit = 250; // Adjust as needed
@@ -935,7 +932,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
         const size = Math.max(24, Math.round(magToRadius(ev.magnitude) * 2) + 8);
         const points = `${size / 2},0 0,${size} ${size},${size}`;
         const svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-                   <polygon points="${points}" stroke="#8c0707c7" stroke-width="2" fill="${magToColor(ev.magnitude)}" fill-opacity="0.95" />
+                   <polygon points="${points}" stroke="#8B0000" stroke-width="2" fill="${magToColor(ev.magnitude)}" fill-opacity="0.95" />
                  </svg>`;
 
         const icon = L.divIcon({
@@ -1005,22 +1002,45 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
         playQuakeSound(isNearby, ev.magnitude);
     }
 
-    // if newest, set latestMarker, animate and notify
     if (isLatest) {
-        // clear any previous latest animation interval if present
-        if (latestMarker && latestMarker._pulse) {
-            clearInterval(latestMarker._pulse);
-            latestMarker._pulse = null;
-        }
-
-        latestMarker = markerLayer;
-        try { animateLatestMarker(markerLayer); } catch (err) { console.warn("animateLatestMarker error:", err); }
-        try { showNotification(ev, markerLayer); } catch (err) { console.warn("showNotification error:", err); }
-        try { addRealShakeMapLayer(); } catch (err) { /* ignore shake map errors */ }
+    // Clear previous latest animation
+    if (latestMarker && latestMarker._pulse) {
+        clearInterval(latestMarker._pulse);
+        latestMarker._pulse = null;
     }
 
-    // keep marker count under limit (optional)
-    limitMarkers();
+    latestMarker = markerLayer;
+
+    // Animate, notify, shake map
+    try { animateLatestMarker(markerLayer); } catch (err) { console.warn("animateLatestMarker error:", err); }
+    try { showNotification(ev, markerLayer); } catch (err) { console.warn("showNotification error:", err); }
+    try { addRealShakeMapLayer(); } catch (err) { /* ignore */ }
+
+    // Force latest marker and tooltip on top
+    setTimeout(() => {
+        try {
+            // Bring marker layer front (works for circleMarker and normal markers)
+            if (markerLayer.bringToFront) markerLayer.bringToFront();
+
+            // If tooltip exists
+            const tooltip = markerLayer.getTooltip();
+            if (tooltip && tooltip._container) {
+                tooltip._container.style.zIndex = 9999;
+            }
+
+            // For divIcon / triangle markers
+            const el = markerLayer.getElement?.();
+            if (el) {
+                el.style.zIndex = 9999;
+                el.style.position = "relative"; // required for z-index
+            }
+        } catch (err) {
+            console.warn("Failed to bring latest marker to front:", err);
+        }
+    }, 50); // small delay ensures Leaflet finished rendering
+}
+
+
 }
 
 // Runtime safeguard: hide on mobile, show on desktop
@@ -1169,7 +1189,7 @@ function initLocationButton() {
     // Adjust text/button for mobile in JS (content can’t be changed via CSS alone)
     if (window.innerWidth <= 480) {
         bar.querySelector(".location-bar-text").textContent = "Allow access to show your location";
-        bar.querySelector("#enableLocationBtn").textContent = "Enable Access to my Location";
+        bar.querySelector("#enableLocationBtn").textContent = "Enable Access";
     }
 
     // Button click handling
