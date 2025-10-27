@@ -1276,7 +1276,6 @@ function addUserMarker() {
 
     map.setView([userLocation.lat, userLocation.lon], 7);
 }
-
 // Add Responsive Legend
 const legend = L.control({ position: "bottomright" });
 
@@ -1290,7 +1289,8 @@ legend.onAdd = function (map) {
     const fontSize = isMobile ? "0.7rem" : "0.85rem";
     const iconSize = isMobile ? 14 : 18;
     const padding = isMobile ? "6px 8px" : "8px 12px";
-    const maxWidth = isMobile ? "45vw" : "220px"; // Prevent it from overflowing
+    const maxHeight = isMobile ? "35vh" : "auto"; // limit height on mobile
+    const maxWidth = isMobile ? "45vw" : "220px"; // limit width
 
     div.style.background = "rgba(255, 255, 255, 0.85)";
     div.style.padding = padding;
@@ -1298,9 +1298,11 @@ legend.onAdd = function (map) {
     div.style.boxShadow = "0 0 15px rgba(0,0,0,0.2)";
     div.style.fontSize = fontSize;
     div.style.lineHeight = "1.4";
-    div.style.color = "#ffffffff"; // fixed color
+    div.style.color = "#ffffffff"; // proper color
     div.style.maxWidth = maxWidth;
-    div.style.overflowWrap = "break-word";
+    div.style.maxHeight = maxHeight;
+    div.style.overflowY = isMobile ? "auto" : "visible"; // allow scrolling if tall
+    div.style.marginBottom = isMobile ? "10px" : "0"; // push it up slightly
 
     div.innerHTML = "<strong>Magnitude</strong><br>";
 
