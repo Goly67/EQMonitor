@@ -1229,101 +1229,119 @@ function initLocationButton() {
 }
 
 /************************************************************************
- * Request location (called only after user gesture)
+ * Browser checks and access blocking overlay
  ************************************************************************/
-
 function isInAppBrowser() {
-    const ua = navigator.userAgent || navigator.vendor || window.opera;
-    return (
-        ua.includes("FBAN") || ua.includes("FBAV") || // Facebook/Messenger
-        ua.includes("Instagram") || 
-        ua.includes("Line/") ||
-        ua.includes("TikTok") ||
-        ua.includes("Twitter")
+  const ua = navigator.userAgent || navigator.vendor || window.opera;
+  return (
+    ua.includes("FBAN") || ua.includes("FBAV") || // Facebook/Messenger
+    ua.includes("Instagram") ||
+    ua.includes("Line/") ||
+    ua.includes("TikTok") ||
+    ua.includes("Twitter")
+  );
+}
+
+function isSupportedBrowser() {
+  const ua = navigator.userAgent.toLowerCase();
+  return ua.includes("chrome") || ua.includes("safari");
+}
+
+// Show overlay that prevents interaction
+function showBrowserBlocker(message) {
+  const blocker = document.createElement("div");
+  blocker.style.position = "fixed";
+  blocker.style.top = 0;
+  blocker.style.left = 0;
+  blocker.style.width = "100vw";
+  blocker.style.height = "100vh";
+  blocker.style.background = "#0a0a0a";
+  blocker.style.color = "#fff";
+  blocker.style.display = "flex";
+  blocker.style.flexDirection = "column";
+  blocker.style.alignItems = "center";
+  blocker.style.justifyContent = "center";
+  blocker.style.zIndex = 99999;
+  blocker.style.fontFamily = "system-ui, sans-serif";
+  blocker.innerHTML = `
+    <h2 style="font-size:1.5rem;margin-bottom:1rem;">Unsupported Browser</h2>
+    <p style="max-width:80%;text-align:center;">
+      ${message}<br><br>
+      Please open this page using <b>Chrome</b> or <b>Safari</b> for full functionality.
+    </p>
+  `;
+  document.body.innerHTML = ""; // clear existing content
+  document.body.appendChild(blocker);
+}
+
+// Run browser check as soon as page loads
+window.addEventListener("load", () => {
+  if (isInAppBrowser()) {
+    showBrowserBlocker("In-app browsers (like Messenger, Instagram, or TikTok) block location access.");
+  } else if (!isSupportedBrowser()) {
+    showBrowserBlocker("Your current browser isn’t supported.");
+  }
+});
+
+/************************************************************************
+ * Request location (only called after user gesture)
+ ************************************************************************/
+async function requestLocationPermission(forceAsk = false) {
+  if (!("geolocation" in navigator)) {
+    alert("Geolocation not supported by this browser.");
+    return false;
+  }
+
+  if (location.protocol !== "https:" && location.hostname !== "localhost") {
+    alert("⚠️ Location access requires HTTPS. Please use a secure (https://) site.");
+    return false;
+  }
+
+  let state = "prompt";
+  try {
+    const status = await navigator.permissions.query({ name: "geolocation" });
+    state = status.state;
+  } catch {}
+
+  if (state === "granted" && !forceAsk) return getAndStoreUserLocation();
+
+  if (state === "prompt" || forceAsk) {
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          userLocation = {
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          };
+          console.log("✅ Location obtained:", userLocation);
+          localStorage.setItem("locationPermission", "granted");
+          addUserMarker();
+          resolve(true);
+        },
+        (err) => {
+          console.warn("⚠️ Location error:", err);
+          if (err.code === 1)
+            alert("🚫 Location permission denied. Please allow access to continue.");
+          else
+            alert("Unable to get location. " + err.message);
+          localStorage.setItem("locationPermission", "denied");
+          resolve(false);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+      );
+    });
+  }
+
+  if (state === "denied") {
+    alert(
+      "Location access has been blocked.\n\n" +
+        "Please go to your browser settings > Site Settings > Allow Location."
     );
+    return false;
+  }
 }
 
-function isSafari() {
-    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-}
-
-async function requestLocationPermission(forceAsk = false) {
-    if (isInAppBrowser()) {
-        alert("⚠️ Please open this page in Chrome or Safari for location access.");
-        return false;
-    }
-
-    if (isSafari()) {
-        alert("📱 Safari might block automatic prompts. If you don’t see one, enable location manually in Settings > Safari > Location.");
-    }
-}
-
-async function requestLocationPermission(forceAsk = false) {
-    if (!("geolocation" in navigator)) {
-        alert("❌ Geolocation not supported by this browser.");
-        return false;
-    }
-
-    if (location.protocol !== "https:" && location.hostname !== "localhost") {
-        alert("⚠️ Location access requires HTTPS. Please use a secure (https://) site.");
-        return false;
-    }
-
-    // Check permission status (if supported)
-    let state = "prompt";
-    try {
-        const status = await navigator.permissions.query({ name: "geolocation" });
-        state = status.state;
-        console.log("📍 Permission state:", state);
-    } catch (e) {
-        console.warn("Permission API not supported, continuing...");
-    }
-
-    // If permission previously granted
-    if (state === "granted" && !forceAsk) {
-        return getAndStoreUserLocation();
-    }
-
-    // If permission not yet decided (prompt)
-    if (state === "prompt" || forceAsk) {
-        console.log("🔔 Requesting location...");
-        return new Promise((resolve) => {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    userLocation = {
-                        lat: pos.coords.latitude,
-                        lon: pos.coords.longitude,
-                        accuracy: pos.coords.accuracy,
-                    };
-                    console.log("✅ Location obtained:", userLocation);
-                    localStorage.setItem("locationPermission", "granted");
-                    addUserMarker();
-                    resolve(true);
-                },
-                (err) => {
-                    console.warn("⚠️ Location error:", err);
-                    if (err.code === 1) {
-                        alert("🚫 Location permission denied. Please allow access to continue.");
-                    } else {
-                        alert("⚠️ Unable to get location. " + err.message);
-                    }
-                    localStorage.setItem("locationPermission", "denied");
-                    resolve(false);
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-            );
-        });
-    }
-
-    // If permission explicitly denied
-    if (state === "denied") {
-        alert(
-            "⚠️ Location access has been blocked.\n\n" +
-            "Please go to your browser settings > Site Settings > Allow Location."
-        );
-        return false;
-    }
-}
 
 /************************************************************************
  * Adds the user's marker to the map
