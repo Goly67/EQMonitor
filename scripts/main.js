@@ -1277,7 +1277,7 @@ function addUserMarker() {
     map.setView([userLocation.lat, userLocation.lon], 7);
 }
 // Add Responsive Legend
-const legend = L.control({ position: "bottomright" });
+const legend = L.control({ position: "topleft" });
 
 legend.onAdd = function (map) {
     const div = L.DomUtil.create("div", "info legend");
