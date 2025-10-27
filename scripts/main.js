@@ -159,7 +159,9 @@ let currentNotificationId = null;
 
 document.getElementById("sourceSelector").addEventListener("change", function (e) {
     currentSource = e.target.value;
-    markers.forEach(({ layer }) => map.removeLayer(layer));
+    if (!markers.has(event.id)) {
+  addOrUpdateEventMarker(event);
+}
     markers.clear();
     fetchNewEvents();
 });
@@ -181,6 +183,7 @@ function getCoverageDistance(mag) {
  ************************************************************************/
 const map = L.map("map").setView([12.879721, 121.774017], 6);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    preferCanvas: true,
     maxZoom: 18,
     attribution: "© OpenStreetMap contributors",
 }).addTo(map);
@@ -314,28 +317,30 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
 
     if (markers.has(ev.id)) return;
 
-    const circle = L.circleMarker([ev.lat, ev.lon], {
-        radius: magToRadius(ev.magnitude),
-        color: "#222",
-        weight: 1,
-        fillOpacity: 0.8,
-        fillColor: magToColor(ev.magnitude),
-    }).bindPopup(`
+    // Add circle marker
+const circle = L.circleMarker([ev.lat, ev.lon], {
+    radius: magToRadius(ev.magnitude),
+    color: "#222",
+    weight: 1,
+    fillOpacity: 0.8,
+    fillColor: magToColor(ev.magnitude),
+}).bindPopup(`
+  <strong>${ev.location || "Unknown"}</strong><br>
+  Mag: ${ev.magnitude}<br>
+  Depth: ${ev.depth ?? "?"} km<br>
+  ${formatDateTime(ev.time)}<br>
+  ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
+`).addTo(map);
 
-      <strong>${ev.location || "Unknown"}</strong><br>
-      Mag: ${ev.magnitude}<br>
-      Depth: ${ev.depth ?? "?"} km<br>
-      ${formatDateTime(ev.time)}<br>
-      ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
-    `).addTo(map);
-
+// 🖥️ Show magnitude helper label only on desktop
+if (window.innerWidth > 768) {
     circle.bindTooltip(`M${ev.magnitude}`, {
         permanent: true,
         direction: "center",
         className: "magnitude-label",
         opacity: 1
     });
-
+}
     circle._eventId = ev.id;
     markers.set(ev.id, { layer: circle, data: ev });
 
@@ -379,10 +384,13 @@ function animateLatestMarker(marker) {
     markers.forEach(({ layer }) => {
         const oldTooltip = layer.getTooltip()?._container;
         if (oldTooltip) oldTooltip.classList.remove("flash");
+        if (layer._path) layer._path.classList.remove("flash-circle");
     });
 
+    // Add flash to this marker and label
     const tooltip = marker.getTooltip()?._container;
     if (tooltip) tooltip.classList.add("flash");
+    if (marker._path) marker._path.classList.add("flash-circle");
 
     const quakeData = markers.get(marker._eventId)?.data || {};
     const mag = Number(quakeData.magnitude ?? quakeData.mag ?? 4.0);
@@ -408,7 +416,7 @@ function animateLatestMarker(marker) {
 
     const sWaveCircle = L.circle(center, {
         radius: 0,
-        color: "#ff4500",
+        color: "#ff0000ff",
         weight: 2,
         opacity: 0.8,
         fillColor: sWaveColor,
@@ -425,19 +433,14 @@ function animateLatestMarker(marker) {
     let step = 0;
     let lastTime = performance.now();
 
-    // --- Smooth animation using requestAnimationFrame ---
     function animate(time) {
-        const delta = (time - lastTime) / 1000; // sec since last frame
+        const delta = (time - lastTime) / 1000;
         lastTime = time;
-
-        // advance by frame time instead of fixed 33ms
         step += delta * 30;
         const t = Math.min(step / totalSteps, 1);
 
-        // compute smooth wavefront distances (m)
         const pRadius = Math.min(maxRadiusKm * 1000, pWaveSpeed * 1000 * step / 30);
         const sRadius = Math.min(maxRadiusKm * 1000, sWaveSpeed * 1000 * step / 30);
-
         const fade = 1 - t;
 
         pWaveCircle.setRadius(pRadius);
@@ -453,9 +456,8 @@ function animateLatestMarker(marker) {
             fillOpacity: fade * 0.25,
         });
 
-        if (t < 1) {
-            requestAnimationFrame(animate);
-        } else {
+        if (t < 1) requestAnimationFrame(animate);
+        else {
             map.removeLayer(pWaveCircle);
             map.removeLayer(sWaveCircle);
         }
@@ -614,6 +616,20 @@ async function fetchNewEvents() {
         setStatus("Error fetching events: " + e.message);
     }
 }
+
+function limitMarkers() {
+  const limit = 250; // Adjust as needed
+  const keys = Array.from(markers.keys());
+  if (keys.length > limit) {
+    const removeKeys = keys.slice(0, keys.length - limit);
+    removeKeys.forEach((key) => {
+      const { layer } = markers.get(key);
+      map.removeLayer(layer);
+      markers.delete(key);
+    });
+  }
+}
+
 
 /************************************************************************
  * CONTROLS
@@ -877,6 +893,18 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
     }
 }
 
+// Runtime safeguard: hide on mobile, show on desktop
+function handleMagnitudeLabelsResponsive() {
+  const isMobile = window.innerWidth <= 768;
+  document.querySelectorAll(".leaflet-tooltip.magnitude-label").forEach(el => {
+    el.style.display = isMobile ? "none" : "block";
+  });
+}
+
+// Run once on load and every resize
+handleMagnitudeLabelsResponsive();
+window.addEventListener("resize", handleMagnitudeLabelsResponsive);
+
 /************************************************************************
  * SSE EVENT HANDLER FIX
  ************************************************************************/
@@ -1106,6 +1134,8 @@ function addUserMarker() {
  ************************************************************************/
 (function init() {
     currentRange = getDateRange("today");
+
+    limitMarkers();
 
     // Initialize Location Button FIRST (user must tap to trigger geolocation)
     initLocationButton();

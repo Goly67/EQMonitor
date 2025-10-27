@@ -131,6 +131,23 @@ body {
     transform: scale(1.1);
 }
 
+@media (max-width: 768px) {
+  .leaflet-tooltip.magnitude-label {
+    display: none !important;
+  }
+}
+
+/* 🔴 Flash animation for latest quake circle */
+.leaflet-interactive.flash-circle {
+  animation: flashCircle 1s infinite alternate;
+}
+
+@keyframes flashCircle {
+  0% { stroke: #ff0000; fill: rgba(255, 0, 0, 1); }
+  100% { stroke: #ff5555; fill: rgba(255, 100, 100, 1); }
+}
+
+
 .burger-line {
     width: 24px;
     height: 2px;
