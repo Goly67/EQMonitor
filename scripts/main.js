@@ -160,8 +160,8 @@ let currentNotificationId = null;
 document.getElementById("sourceSelector").addEventListener("change", function (e) {
     currentSource = e.target.value;
     if (!markers.has(event.id)) {
-  addOrUpdateEventMarker(event);
-}
+        addOrUpdateEventMarker(event);
+    }
     markers.clear();
     fetchNewEvents();
 });
@@ -176,7 +176,6 @@ function getCoverageDistance(mag) {
     if (mag < 8) return "200–400 miles";
     return "400–600 miles or more";
 }
-
 
 /************************************************************************
  * MAP
@@ -315,34 +314,94 @@ function formatDateTime(dt) {
 function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
     if (!ev.lat || !ev.lon) return;
 
+    // ✅ Skip duplicates
     if (markers.has(ev.id)) return;
 
-    // Add circle marker
-const circle = L.circleMarker([ev.lat, ev.lon], {
-    radius: magToRadius(ev.magnitude),
-    color: "#222",
-    weight: 1,
-    fillOpacity: 0.8,
-    fillColor: magToColor(ev.magnitude),
-}).bindPopup(`
-  <strong>${ev.location || "Unknown"}</strong><br>
-  Mag: ${ev.magnitude}<br>
-  Depth: ${ev.depth ?? "?"} km<br>
-  ${formatDateTime(ev.time)}<br>
-  ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
-`).addTo(map);
+    // If a new latest quake is coming in — revert the previous latest (triangle → circle)
+    if (isLatest && latestMarker && latestMarker._eventId) {
+        const prevData = markers.get(latestMarker._eventId)?.data;
+        if (prevData) {
+            map.removeLayer(latestMarker);
+            const oldCircle = L.circleMarker([prevData.lat, prevData.lon], {
+                radius: magToRadius(prevData.magnitude),
+                color: "#222",
+                weight: 1,
+                fillOpacity: 0.8,
+                fillColor: magToColor(prevData.magnitude),
+            }).bindPopup(`
+              <strong>${prevData.location || "Unknown"}</strong><br>
+              Mag: ${prevData.magnitude}<br>
+              Depth: ${prevData.depth ?? "?"} km<br>
+              ${formatDateTime(prevData.time)}<br>
+              ${prevData.link ? `<a href="${prevData.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
+            `).addTo(map);
 
-// 🖥️ Show magnitude helper label only on desktop
-if (window.innerWidth > 768) {
-    circle.bindTooltip(`M${ev.magnitude}`, {
-        permanent: true,
-        direction: "center",
-        className: "magnitude-label",
-        opacity: 1
-    });
-}
-    circle._eventId = ev.id;
-    markers.set(ev.id, { layer: circle, data: ev });
+            oldCircle.bindTooltip(`M${prevData.magnitude}`, {
+                permanent: true,
+                direction: "center",
+                className: "magnitude-label",
+                opacity: 1
+            });
+
+            markers.set(prevData.id, { layer: oldCircle, data: prevData });
+        }
+    }
+
+    let marker;
+
+    // 🔺 If latest quake, draw triangle marker using Leaflet’s SVG layer
+    if (isLatest) {
+        const triangle = L.shapeMarker([ev.lat, ev.lon], {
+            shape: 'triangle',
+            radius: magToRadius(ev.magnitude) * 1.4,
+            color: "#ff0000",
+            weight: 2,
+            fillColor: "#ff6666",
+            fillOpacity: 0.9
+        }).bindPopup(`
+          <strong>${ev.location || "Unknown"}</strong><br>
+          Mag: ${ev.magnitude}<br>
+          Depth: ${ev.depth ?? "?"} km<br>
+          ${formatDateTime(ev.time)}<br>
+          ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
+        `).addTo(map);
+
+        triangle.bindTooltip(`M${ev.magnitude}`, {
+            permanent: true,
+            direction: "center",
+            className: "magnitude-label latest",
+            opacity: 1
+        });
+
+        marker = triangle;
+    } else {
+        // 🟢 Regular quake = circle
+        const circle = L.circleMarker([ev.lat, ev.lon], {
+            radius: magToRadius(ev.magnitude),
+            color: "#222",
+            weight: 1,
+            fillOpacity: 0.8,
+            fillColor: magToColor(ev.magnitude),
+        }).bindPopup(`
+          <strong>${ev.location || "Unknown"}</strong><br>
+          Mag: ${ev.magnitude}<br>
+          Depth: ${ev.depth ?? "?"} km<br>
+          ${formatDateTime(ev.time)}<br>
+          ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
+        `).addTo(map);
+
+        circle.bindTooltip(`M${ev.magnitude}`, {
+            permanent: true,
+            direction: "center",
+            className: "magnitude-label",
+            opacity: 1
+        });
+
+        marker = circle;
+    }
+
+    marker._eventId = ev.id;
+    markers.set(ev.id, { layer: marker, data: ev });
 
     if (playSoundFlag && userLocation) {
         const dist = getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon);
@@ -350,34 +409,37 @@ if (window.innerWidth > 768) {
         playQuakeSound(isNearby, ev.magnitude);
     }
 
-    markers.forEach(({ layer }) => {
-        if (layer._path) layer._path.style.zIndex = "1";
-        const tip = layer.getTooltip()?.getElement?.();
-        if (tip) tip.style.zIndex = "1";
-    });
+    if (isLatest && markerLayer) {
+        latestMarker = markerLayer;
 
-    if (isLatest) {
-        // Bring to front both the circle and tooltip
-        setTimeout(() => {
-            if (circle.bringToFront) circle.bringToFront();
-
-            const tooltip = circle.getTooltip()?.getElement?.();
-            if (tooltip) {
-                tooltip.style.zIndex = "9999";
-            }
-
-            // Also adjust SVG element z-index (Leaflet's internal order)
-            if (circle._path) {
-                circle._path.style.zIndex = "9999";
-            }
-        }, 100);
-
-        latestMarker = circle;
-        animateLatestMarker(circle);
-        showNotification(ev, circle);
+        // Animate and notify
+        animateLatestMarker(markerLayer);
+        showNotification(ev, markerLayer);
         addRealShakeMapLayer();
+
+        // ✅ Bring the latest marker and its tooltip to the very front
+        setTimeout(() => {
+            try {
+                markerLayer.bringToFront();
+                const tooltip = markerLayer.getTooltip();
+                if (tooltip && tooltip._container) {
+                    tooltip._container.style.zIndex = 9999;
+                }
+
+                // Also raise its SVG element if using divIcon
+                const el = markerLayer.getElement?.();
+                if (el) {
+                    el.style.zIndex = 9999;
+                    el.style.position = "relative";
+                }
+            } catch (err) {
+                console.warn("Failed to bring latest marker to front:", err);
+            }
+        }, 200); // small delay to ensure Leaflet rendered it
     }
+
 }
+
 
 function animateLatestMarker(marker) {
     // Remove flash from other markers
@@ -416,7 +478,7 @@ function animateLatestMarker(marker) {
 
     const sWaveCircle = L.circle(center, {
         radius: 0,
-        color: "#ff0000ff",
+        color: "#ff4500",
         weight: 2,
         opacity: 0.8,
         fillColor: sWaveColor,
@@ -598,11 +660,11 @@ async function fetchNewEvents() {
 
         if (!events.length) return setStatus("No events in this range");
 
-        // ✅ Always newest first
-        events.sort((a, b) => new Date(b.time) - new Date(a.time));
+        // ✅ Sort oldest first so latest is added last (on top)
+        events.sort((a, b) => new Date(a.time) - new Date(b.time));
 
-        // 🧭 latest quake
-        const latest = events[0];
+        // 🧭 latest quake (now the last in the array after sorting)
+        const latest = events[events.length - 1];
 
         // Add all quakes, but only animate/sound the newest
         events.forEach(ev => addOrUpdateEventMarker(ev, ev.id === latest.id, ev.id === latest.id));
@@ -617,17 +679,18 @@ async function fetchNewEvents() {
     }
 }
 
+
 function limitMarkers() {
-  const limit = 250; // Adjust as needed
-  const keys = Array.from(markers.keys());
-  if (keys.length > limit) {
-    const removeKeys = keys.slice(0, keys.length - limit);
-    removeKeys.forEach((key) => {
-      const { layer } = markers.get(key);
-      map.removeLayer(layer);
-      markers.delete(key);
-    });
-  }
+    const limit = 250; // Adjust as needed
+    const keys = Array.from(markers.keys());
+    if (keys.length > limit) {
+        const removeKeys = keys.slice(0, keys.length - limit);
+        removeKeys.forEach((key) => {
+            const { layer } = markers.get(key);
+            map.removeLayer(layer);
+            markers.delete(key);
+        });
+    }
 }
 
 
@@ -823,82 +886,149 @@ const eventSource = new EventSource("https://earthquakeapi.vercel.app/api/earthq
 ************************************************************************/
 
 function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
-    if (!ev.lat || !ev.lon) return;
+    if (!ev || !ev.lat || !ev.lon) return;
 
-    // ✅ Ignore if this quake already exists (avoid duplicate notifications)
+    // ✅ Ignore duplicates
     if (markers.has(ev.id)) return;
 
-    const circle = L.circleMarker([ev.lat, ev.lon], {
-        radius: magToRadius(ev.magnitude),
-        color: "#222",
-        weight: 1,
-        fillOpacity: 0.8,
-        fillColor: magToColor(ev.magnitude),
-    }).bindPopup(`
+    // If a previous latest exists and a new latest is incoming, revert previous latest to a circle
+    if (isLatest && latestMarker && latestMarker._eventId && latestMarker._eventId !== ev.id) {
+        const prev = markers.get(latestMarker._eventId);
+        if (prev && prev.data) {
+            try {
+                // remove the triangle/latest marker layer
+                map.removeLayer(latestMarker);
+            } catch (err) { /* ignore */ }
 
+            const prevData = prev.data;
+            // create a normal circle marker to replace the previous latest
+            const oldCircle = L.circleMarker([prevData.lat, prevData.lon], {
+                radius: magToRadius(prevData.magnitude),
+                color: "#222",
+                weight: 1,
+                fillOpacity: 0.8,
+                fillColor: magToColor(prevData.magnitude)
+            }).bindPopup(`
+                <strong>${prevData.location || "Unknown"}</strong><br>
+                Mag: ${prevData.magnitude}<br>
+                Depth: ${prevData.depth ?? "?"} km<br>
+                ${formatDateTime(prevData.time)}<br>
+                ${prevData.link ? `<a href="${prevData.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
+            `).addTo(map);
 
-      <strong>${ev.location || "Unknown"}</strong><br>
-      Mag: ${ev.magnitude}<br>
-      Depth: ${ev.depth ?? "?"} km<br>
-      ${formatDateTime(ev.time)}<br>
-      ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
-    `).addTo(map);
-
-    if (isLatest) {
-        setTimeout(() => {
-            // Reset z-index of all old markers + labels
-            markers.forEach(({ layer }) => {
-                if (layer._path) layer._path.style.zIndex = "1";
-                const tip = layer.getTooltip()?.getElement?.();
-                if (tip) tip.style.zIndex = "1";
+            oldCircle.bindTooltip(`M${prevData.magnitude}`, {
+                permanent: true,
+                direction: "center",
+                className: "magnitude-label",
+                opacity: 1
             });
 
-            // Bring this one to the very top
-            if (circle.bringToFront) circle.bringToFront();
-
-            const tooltip = circle.getTooltip()?.getElement?.();
-            if (tooltip) tooltip.style.zIndex = "9999";
-            if (circle._path) circle._path.style.zIndex = "9999";
-        }, 100);
+            // replace in the markers map
+            markers.set(prevData.id, { layer: oldCircle, data: prevData });
+            latestMarker = null; // we'll set the new latest later
+        }
     }
 
+    // Create the marker: triangle if latest, circle otherwise
+    let markerLayer;
+    if (isLatest) {
+        const size = Math.max(24, Math.round(magToRadius(ev.magnitude) * 2) + 8);
+        const points = `${size / 2},0 0,${size} ${size},${size}`;
+        const svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+                   <polygon points="${points}" stroke="#8c0707c7" stroke-width="2" fill="${magToColor(ev.magnitude)}" fill-opacity="0.95" />
+                 </svg>`;
 
-    circle.bindTooltip(`M${ev.magnitude}`, {
-        permanent: true,
-        direction: "center",
-        className: "magnitude-label",
-        opacity: 1
-    });
+        const icon = L.divIcon({
+            className: "triangle-marker-divicon",
+            html: svg,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2]
+        });
 
-    circle._eventId = ev.id;
-    markers.set(ev.id, { layer: circle, data: ev });
+        markerLayer = L.marker([ev.lat, ev.lon], { icon }).addTo(map);
 
+        markerLayer.bindPopup(`
+          <strong>${ev.location || "Unknown"}</strong><br>
+          Mag: ${ev.magnitude}<br>
+          Depth: ${ev.depth ?? "?"} km<br>
+          ${formatDateTime(ev.time)}<br>
+          ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
+        `);
+
+        // Add a prominent tooltip for the latest
+        markerLayer.bindTooltip(` M${ev.magnitude}`, {
+            permanent: true,
+            direction: "center",
+            className: "magnitude-label latest",
+            opacity: 1
+        });
+
+        // marker.getElement() returns the DIV; query the svg inside it:
+        const el = markerLayer.getElement && markerLayer.getElement();
+        if (el) {
+            markerLayer._path = el.querySelector("svg") || el;
+        }
+    } else {
+        // regular circle marker
+        markerLayer = L.circleMarker([ev.lat, ev.lon], {
+            radius: magToRadius(ev.magnitude),
+            color: "#222",
+            weight: 1,
+            fillOpacity: 0.8,
+            fillColor: magToColor(ev.magnitude),
+        }).addTo(map);
+
+        markerLayer.bindPopup(`
+          <strong>${ev.location || "Unknown"}</strong><br>
+          Mag: ${ev.magnitude}<br>
+          Depth: ${ev.depth ?? "?"} km<br>
+          ${formatDateTime(ev.time)}<br>
+          ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
+        `);
+
+        markerLayer.bindTooltip(`M${ev.magnitude}`, {
+            permanent: true,
+            direction: "center",
+            className: "magnitude-label",
+            opacity: 1
+        });
+    }
+
+    // set housekeeping props and store
+    markerLayer._eventId = ev.id;
+    markers.set(ev.id, { layer: markerLayer, data: ev });
+
+    // optionally play sound based on proximity
     if (playSoundFlag && userLocation) {
         const dist = getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon);
         const isNearby = dist <= 100;
         playQuakeSound(isNearby, ev.magnitude);
     }
 
+    // if newest, set latestMarker, animate and notify
     if (isLatest) {
-        // Stop previous latest animation safely
+        // clear any previous latest animation interval if present
         if (latestMarker && latestMarker._pulse) {
             clearInterval(latestMarker._pulse);
             latestMarker._pulse = null;
         }
 
-        latestMarker = circle;
-        animateLatestMarker(circle);
-        showNotification(ev, circle);
-        addRealShakeMapLayer();
+        latestMarker = markerLayer;
+        try { animateLatestMarker(markerLayer); } catch (err) { console.warn("animateLatestMarker error:", err); }
+        try { showNotification(ev, markerLayer); } catch (err) { console.warn("showNotification error:", err); }
+        try { addRealShakeMapLayer(); } catch (err) { /* ignore shake map errors */ }
     }
+
+    // keep marker count under limit (optional)
+    limitMarkers();
 }
 
 // Runtime safeguard: hide on mobile, show on desktop
 function handleMagnitudeLabelsResponsive() {
-  const isMobile = window.innerWidth <= 768;
-  document.querySelectorAll(".leaflet-tooltip.magnitude-label").forEach(el => {
-    el.style.display = isMobile ? "none" : "block";
-  });
+    const isMobile = window.innerWidth <= 768;
+    document.querySelectorAll(".leaflet-tooltip.magnitude-label").forEach(el => {
+        el.style.display = isMobile ? "none" : "block";
+    });
 }
 
 // Run once on load and every resize
@@ -925,8 +1055,6 @@ eventSource.onmessage = (event) => {
 
         // ✅ add new marker & animate once
         addOrUpdateEventMarker(normalizeEvent(quake), true, true);
-        markers.forEach(({ layer }) => map.removeLayer(layer));
-        markers.clear();
 
         markUpdate();
     } catch (err) {
@@ -938,23 +1066,23 @@ eventSource.onmessage = (event) => {
  * Modern bottom-bar style “Enable My Location” for mobile browsers
  ************************************************************************/
 function initLocationButton() {
-  // Prevent duplicates
-  if (document.getElementById("enableLocationBar")) return;
+    // Prevent duplicates
+    if (document.getElementById("enableLocationBar")) return;
 
-  const bar = document.createElement("div");
-  bar.id = "enableLocationBar";
-  bar.innerHTML = `
+    const bar = document.createElement("div");
+    bar.id = "enableLocationBar";
+    bar.innerHTML = `
     <div class="location-bar-content">
       <span class="location-bar-text">Allow access to show your location</span>
       <button id="enableLocationBtn">Enable Access to my Location</button>
     </div>
   `;
 
-  document.body.appendChild(bar);
+    document.body.appendChild(bar);
 
-  // Add styles
-  const style = document.createElement("style");
-  style.textContent = `
+    // Add styles
+    const style = document.createElement("style");
+    style.textContent = `
     #enableLocationBar {
       position: fixed;
       bottom: 0;
@@ -1036,32 +1164,32 @@ function initLocationButton() {
       to { transform: translateY(100%); opacity: 0; }
     }
   `;
-  document.head.appendChild(style);
+    document.head.appendChild(style);
 
-  // Adjust text/button for mobile in JS (content can’t be changed via CSS alone)
-  if (window.innerWidth <= 480) {
-    bar.querySelector(".location-bar-text").textContent = "Allow access to show your location";
-    bar.querySelector("#enableLocationBtn").textContent = "Enable Access";
-  }
-
-  // Button click handling
-  const btn = document.getElementById("enableLocationBtn");
-  btn.addEventListener("click", async () => {
-    btn.disabled = true;
-    btn.textContent = "Getting location...";
-    const success = await requestLocationPermission(true);
-    if (success) {
-      btn.textContent = "Location Enabled";
-      bar.style.animation = "slideDown 0.4s ease forwards";
-      setTimeout(() => bar.remove(), 400);
-    } else {
-      btn.textContent = "Permission Denied";
-      setTimeout(() => {
-        bar.style.animation = "slideDown 0.4s ease forwards";
-        setTimeout(() => bar.remove(), 400);
-      }, 2000);
+    // Adjust text/button for mobile in JS (content can’t be changed via CSS alone)
+    if (window.innerWidth <= 480) {
+        bar.querySelector(".location-bar-text").textContent = "Allow access to show your location";
+        bar.querySelector("#enableLocationBtn").textContent = "Enable Access to my Location";
     }
-  });
+
+    // Button click handling
+    const btn = document.getElementById("enableLocationBtn");
+    btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        btn.textContent = "Getting location...";
+        const success = await requestLocationPermission(true);
+        if (success) {
+            btn.textContent = "Location Enabled";
+            bar.style.animation = "slideDown 0.4s ease forwards";
+            setTimeout(() => bar.remove(), 400);
+        } else {
+            btn.textContent = "Permission Denied";
+            setTimeout(() => {
+                bar.style.animation = "slideDown 0.4s ease forwards";
+                setTimeout(() => bar.remove(), 400);
+            }, 2000);
+        }
+    });
 }
 
 /************************************************************************
