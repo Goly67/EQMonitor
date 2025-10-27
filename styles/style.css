@@ -146,6 +146,25 @@ body {
   }
 }
 
+.flash-circle {
+  animation: flashPulse 0.7s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes flashPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+    filter: drop-shadow(0 0 6px rgb(201, 0, 0));
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 0.6;
+    filter: drop-shadow(0 0 12px rgba(203, 140, 140, 0.2));
+  }
+}
+
+
 /* 🔴 Flash animation for latest quake circle */
 .leaflet-interactive.flash-circle {
   animation: flashCircle 1s infinite alternate;

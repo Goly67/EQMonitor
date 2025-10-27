@@ -348,21 +348,22 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
 
     let marker;
 
-    // 🔺 If latest quake, draw triangle marker using Leaflet’s SVG layer
+    // When placing latest marker (triangle)
     if (isLatest) {
-        const triangle = L.shapeMarker([ev.lat, ev.lon], {
+        const triangle = L.shapeMarker(ev.lat, ev.lon, {
             shape: 'triangle',
             radius: magToRadius(ev.magnitude) * 1.4,
-            color: "#ff0000",
-            weight: 2,
-            fillColor: "#ff6666",
-            fillOpacity: 0.9
+            color: '#ff0000',      // stroke red
+            fillColor: '#ff6666',  // fill softer red
+            fillOpacity: 0.95,
+            weight: 2
         }).bindPopup(`
           <strong>${ev.location || "Unknown"}</strong><br>
           Mag: ${ev.magnitude}<br>
           Depth: ${ev.depth ?? "?"} km<br>
           ${formatDateTime(ev.time)}<br>
           ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
+          animateLatestMarker(triangle);
         `).addTo(map);
 
         triangle.bindTooltip(`M${ev.magnitude}`, {
@@ -409,48 +410,64 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
     }
 
     if (isLatest) {
-    latestMarker = markerLayer;
+        latestMarker = markerLayer;
 
-    // Animate, notify, shake map
-    animateLatestMarker(markerLayer);
-    showNotification(ev, markerLayer);
-    addRealShakeMapLayer();
+        // Animate, notify, shake map
+        animateLatestMarker(markerLayer);
+        showNotification(ev, markerLayer);
+        addRealShakeMapLayer();
 
-    // ✅ Bring the latest marker and tooltip above all others
-    setTimeout(() => {
-        try {
-            markerLayer.bringToFront(); // Leaflet layer
-            const tooltip = markerLayer.getTooltip();
-            if (tooltip && tooltip._container) {
-                tooltip._container.style.zIndex = 9999; // tooltip front
+        // ✅ Bring the latest marker and tooltip above all others
+        setTimeout(() => {
+            try {
+                markerLayer.bringToFront(); // Leaflet layer
+                const tooltip = markerLayer.getTooltip();
+                if (tooltip && tooltip._container) {
+                    tooltip._container.style.zIndex = 9999; // tooltip front
+                }
+
+                // If using divIcon SVG (triangle), raise its z-index
+                const el = markerLayer.getElement?.();
+                if (el) {
+                    el.style.zIndex = 9999;
+                    el.style.position = "relative";
+                }
+            } catch (err) {
+                console.warn("Failed to bring latest marker to front:", err);
             }
-
-            // If using divIcon SVG (triangle), raise its z-index
-            const el = markerLayer.getElement?.();
-            if (el) {
-                el.style.zIndex = 9999;
-                el.style.position = "relative";
-            }
-        } catch (err) {
-            console.warn("Failed to bring latest marker to front:", err);
-        }
-    }, 50); // slight delay ensures Leaflet finished rendering
+        }, 50); // slight delay ensures Leaflet finished rendering
+    }
 }
-}
-
 
 function animateLatestMarker(marker) {
     // Remove flash from other markers
     markers.forEach(({ layer }) => {
         const oldTooltip = layer.getTooltip()?._container;
         if (oldTooltip) oldTooltip.classList.remove("flash");
-        if (layer._path) layer._path.classList.remove("flash-circle");
+
+        // Remove flash from both circle and triangle markers
+        if (layer._path) {
+            layer._path.classList.remove("flash-circle");
+        } else {
+            const el = layer.getElement?.();
+            if (el) el.classList.remove("flash-circle");
+        }
     });
 
     // Add flash to this marker and label
     const tooltip = marker.getTooltip()?._container;
     if (tooltip) tooltip.classList.add("flash");
-    if (marker._path) marker._path.classList.add("flash-circle");
+
+    // Handle both circleMarker and shapeMarker (triangle)
+    if (marker._path) {
+        marker._path.classList.add("flash-circle"); // Circle SVG
+    } else {
+        const el = marker.getElement?.();
+        if (el) {
+            el.classList.add("flash-circle"); // Triangle SVG
+            el.style.filter = "drop-shadow(0 0 10px rgba(255, 60, 60, 0.9))";
+        }
+    }
 
     const quakeData = markers.get(marker._eventId)?.data || {};
     const mag = Number(quakeData.magnitude ?? quakeData.mag ?? 4.0);
@@ -525,7 +542,6 @@ function animateLatestMarker(marker) {
 
     requestAnimationFrame(animate);
 }
-
 
 function updateCircleScaleByZoom() {
     if (scaleUpdateTimeout) clearTimeout(scaleUpdateTimeout);
@@ -1003,42 +1019,42 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
     }
 
     if (isLatest) {
-    // Clear previous latest animation
-    if (latestMarker && latestMarker._pulse) {
-        clearInterval(latestMarker._pulse);
-        latestMarker._pulse = null;
-    }
-
-    latestMarker = markerLayer;
-
-    // Animate, notify, shake map
-    try { animateLatestMarker(markerLayer); } catch (err) { console.warn("animateLatestMarker error:", err); }
-    try { showNotification(ev, markerLayer); } catch (err) { console.warn("showNotification error:", err); }
-    try { addRealShakeMapLayer(); } catch (err) { /* ignore */ }
-
-    // Force latest marker and tooltip on top
-    setTimeout(() => {
-        try {
-            // Bring marker layer front (works for circleMarker and normal markers)
-            if (markerLayer.bringToFront) markerLayer.bringToFront();
-
-            // If tooltip exists
-            const tooltip = markerLayer.getTooltip();
-            if (tooltip && tooltip._container) {
-                tooltip._container.style.zIndex = 9999;
-            }
-
-            // For divIcon / triangle markers
-            const el = markerLayer.getElement?.();
-            if (el) {
-                el.style.zIndex = 9999;
-                el.style.position = "relative"; // required for z-index
-            }
-        } catch (err) {
-            console.warn("Failed to bring latest marker to front:", err);
+        // Clear previous latest animation
+        if (latestMarker && latestMarker._pulse) {
+            clearInterval(latestMarker._pulse);
+            latestMarker._pulse = null;
         }
-    }, 50); // small delay ensures Leaflet finished rendering
-}
+
+        latestMarker = markerLayer;
+
+        // Animate, notify, shake map
+        try { animateLatestMarker(markerLayer); } catch (err) { console.warn("animateLatestMarker error:", err); }
+        try { showNotification(ev, markerLayer); } catch (err) { console.warn("showNotification error:", err); }
+        try { addRealShakeMapLayer(); } catch (err) { /* ignore */ }
+
+        // Force latest marker and tooltip on top
+        setTimeout(() => {
+            try {
+                // Bring marker layer front (works for circleMarker and normal markers)
+                if (markerLayer.bringToFront) markerLayer.bringToFront();
+
+                // If tooltip exists
+                const tooltip = markerLayer.getTooltip();
+                if (tooltip && tooltip._container) {
+                    tooltip._container.style.zIndex = 9999;
+                }
+
+                // For divIcon / triangle markers
+                const el = markerLayer.getElement?.();
+                if (el) {
+                    el.style.zIndex = 9999;
+                    el.style.position = "relative"; // required for z-index
+                }
+            } catch (err) {
+                console.warn("Failed to bring latest marker to front:", err);
+            }
+        }, 50); // small delay ensures Leaflet finished rendering
+    }
 
 
 }
