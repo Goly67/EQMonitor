@@ -1242,33 +1242,60 @@ async function requestLocationPermission(forceAsk = false) {
         return false;
     }
 
-    const saved = localStorage.getItem("locationPermission");
-    if (saved === "granted" && !forceAsk) {
+    // Check permission status (if supported)
+    let state = "prompt";
+    try {
+        const status = await navigator.permissions.query({ name: "geolocation" });
+        state = status.state;
+        console.log("📍 Permission state:", state);
+    } catch (e) {
+        console.warn("Permission API not supported, continuing...");
+    }
+
+    // If permission previously granted
+    if (state === "granted" && !forceAsk) {
         return getAndStoreUserLocation();
     }
 
-    return new Promise((resolve) => {
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                userLocation = {
-                    lat: pos.coords.latitude,
-                    lon: pos.coords.longitude,
-                    accuracy: pos.coords.accuracy,
-                };
-                console.log("✅ Location obtained:", userLocation);
-                localStorage.setItem("locationPermission", "granted");
-                addUserMarker();
-                resolve(true);
-            },
-            (err) => {
-                console.warn("⚠️ Location error:", err.message);
-                localStorage.setItem("locationPermission", "denied");
-                alert("Please enable location access in your browser settings.");
-                resolve(false);
-            },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    // If permission not yet decided (prompt)
+    if (state === "prompt" || forceAsk) {
+        console.log("🔔 Requesting location...");
+        return new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    userLocation = {
+                        lat: pos.coords.latitude,
+                        lon: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy,
+                    };
+                    console.log("✅ Location obtained:", userLocation);
+                    localStorage.setItem("locationPermission", "granted");
+                    addUserMarker();
+                    resolve(true);
+                },
+                (err) => {
+                    console.warn("⚠️ Location error:", err);
+                    if (err.code === 1) {
+                        alert("🚫 Location permission denied. Please allow access to continue.");
+                    } else {
+                        alert("⚠️ Unable to get location. " + err.message);
+                    }
+                    localStorage.setItem("locationPermission", "denied");
+                    resolve(false);
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+            );
+        });
+    }
+
+    // If permission explicitly denied
+    if (state === "denied") {
+        alert(
+            "⚠️ Location access has been blocked.\n\n" +
+            "Please go to your browser settings > Site Settings > Allow Location."
         );
-    });
+        return false;
+    }
 }
 
 /************************************************************************
