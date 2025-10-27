@@ -1289,8 +1289,8 @@ legend.onAdd = function (map) {
     const fontSize = isMobile ? "0.7rem" : "0.85rem";
     const iconSize = isMobile ? 14 : 18;
     const padding = isMobile ? "6px 8px" : "8px 12px";
-    const maxHeight = isMobile ? "35vh" : "auto"; // limit height on mobile
-    const maxWidth = isMobile ? "45vw" : "220px"; // limit width
+    const maxHeight = isMobile ? "30vh" : "auto"; // slightly shorter
+    const maxWidth = isMobile ? "45vw" : "220px";
 
     div.style.background = "rgba(255, 255, 255, 0.85)";
     div.style.padding = padding;
@@ -1298,11 +1298,13 @@ legend.onAdd = function (map) {
     div.style.boxShadow = "0 0 15px rgba(0,0,0,0.2)";
     div.style.fontSize = fontSize;
     div.style.lineHeight = "1.4";
-    div.style.color = "#ffffffff"; // proper color
+    div.style.color = "#ffffffff";
     div.style.maxWidth = maxWidth;
     div.style.maxHeight = maxHeight;
-    div.style.overflowY = isMobile ? "auto" : "visible"; // allow scrolling if tall
-    div.style.marginBottom = isMobile ? "10px" : "0"; // push it up slightly
+    div.style.overflowY = "auto"; // always allow scrolling if needed
+    div.style.marginBottom = isMobile ? "15px" : "0";
+    div.style.marginRight = isMobile ? "10px" : "0"; // push in from right edge
+    div.style.position = "relative"; // safer positioning
 
     div.innerHTML = "<strong>Magnitude</strong><br>";
 
@@ -1318,6 +1320,13 @@ legend.onAdd = function (map) {
 };
 
 legend.addTo(map);
+
+// Update on resize to stay responsive
+window.addEventListener("resize", () => {
+    legend.remove();
+    legend.addTo(map);
+});
+
 
 /************************************************************************
  * INIT
