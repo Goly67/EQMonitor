@@ -1231,6 +1231,33 @@ function initLocationButton() {
 /************************************************************************
  * Request location (called only after user gesture)
  ************************************************************************/
+
+function isInAppBrowser() {
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    return (
+        ua.includes("FBAN") || ua.includes("FBAV") || // Facebook/Messenger
+        ua.includes("Instagram") || 
+        ua.includes("Line/") ||
+        ua.includes("TikTok") ||
+        ua.includes("Twitter")
+    );
+}
+
+function isSafari() {
+    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+}
+
+async function requestLocationPermission(forceAsk = false) {
+    if (isInAppBrowser()) {
+        alert("⚠️ Please open this page in Chrome or Safari for location access.");
+        return false;
+    }
+
+    if (isSafari()) {
+        alert("📱 Safari might block automatic prompts. If you don’t see one, enable location manually in Settings > Safari > Location.");
+    }
+}
+
 async function requestLocationPermission(forceAsk = false) {
     if (!("geolocation" in navigator)) {
         alert("❌ Geolocation not supported by this browser.");
