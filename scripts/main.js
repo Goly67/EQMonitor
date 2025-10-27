@@ -1277,6 +1277,50 @@ function addUserMarker() {
     map.setView([userLocation.lat, userLocation.lon], 7);
 }
 
+// Add Responsive Legend
+const legend = L.control({ position: "bottomright" });
+
+legend.onAdd = function (map) {
+    const div = L.DomUtil.create("div", "info legend");
+    const grades = [0, 3, 4, 5, 6, 7];
+    const colors = ["#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#BD0026", "#800026"];
+
+    // Responsive sizing
+    const isMobile = window.innerWidth <= 768;
+    const fontSize = isMobile ? "0.7rem" : "0.85rem";
+    const iconSize = isMobile ? 14 : 18;
+    const padding = isMobile ? "6px 8px" : "8px 12px";
+
+    div.style.background = "rgba(255, 255, 255, 0.85)";
+    div.style.padding = padding;
+    div.style.borderRadius = "8px";
+    div.style.boxShadow = "0 0 15px rgba(0,0,0,0.2)";
+    div.style.fontSize = fontSize;
+    div.style.lineHeight = "1.4";
+    div.style.color = "#ffffffff";
+
+    div.innerHTML = "<strong>Magnitude</strong><br>";
+
+    for (let i = 0; i < grades.length; i++) {
+        div.innerHTML +=
+            `<i style="background:${colors[i]}; width:${iconSize}px; height:${iconSize}px; display:inline-block; margin-right:8px; border-radius:50%;"></i>` +
+            `${grades[i]}${grades[i + 1] ? "&ndash;" + grades[i + 1] : "+"}<br>`;
+    }
+
+    div.innerHTML += `<i style="background:#ff6666; width:${iconSize}px; height:${iconSize}px; display:inline-block; margin-right:8px; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></i> Latest Earthquake`;
+
+    return div;
+};
+
+legend.addTo(map);
+
+// Optional: update legend on window resize
+window.addEventListener("resize", () => {
+    legend.remove();
+    legend.addTo(map);
+});
+
+
 /************************************************************************
  * INIT
  ************************************************************************/

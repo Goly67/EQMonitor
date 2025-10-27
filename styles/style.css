@@ -13,6 +13,15 @@ body {
     width: 100%;
 }
 
+.flash-triangle {
+    animation: flash-red 1s infinite;
+}
+
+@keyframes flash-red {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.5) sepia(1) saturate(2) hue-rotate(0deg); } /* Adjust to make it flash red */
+}
+
 /* Header bar */
 .header-bar {
     position: fixed;
