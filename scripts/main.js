@@ -128,12 +128,10 @@ function unlockAudio() {
 function playQuakeSound(isNearby = false, magnitude = 0) {
     if (!audioUnlocked) return;
 
-    // If within 100km AND magnitude >= 5.0, play alarm
-    if (isNearby && magnitude >= 5.0) {
+    if (isNearby && magnitude >= 4.0) {
         alarmSound.currentTime = 0;
         alarmSound.play().catch(err => console.warn("Alarm play failed:", err));
     } else {
-        // Otherwise play regular quake sound
         const audio = isNearby ? quakeNearby : quakeSound;
         audio.currentTime = 0;
         audio.play().catch(err => console.warn("Audio play failed:", err));
@@ -620,10 +618,14 @@ function getDateRange(filter) {
 }
 
 /************************************************************************
- * FETCH EVENTS
+ * FETCH EVENTS (with cache + Facebook RSS fallback)
  ************************************************************************/
 async function fetchNewEvents() {
     setStatus("Fetching events...");
+    const cacheKey = "cachedEarthquakes";
+    const cacheTimeKey = "cachedEarthquakesTime";
+    const fbFeedUrl = "https://rss.app/feeds/U6XZP9zYYmVM8EiP.xml";
+
     try {
         let url;
         if (currentSource === "phivolcs") {
@@ -640,7 +642,7 @@ async function fetchNewEvents() {
             url = CONFIG.EMSC_ENDPOINT;
         }
 
-        // ✅ Fetch data fresh
+        // ✅ Try to fetch from PHIVOLCS / other sources
         const resp = await fetch(url + `?t=${Date.now()}`, { cache: "no-store" });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const json = await resp.json();
@@ -672,7 +674,7 @@ async function fetchNewEvents() {
             })).filter(e => e.lat && e.lon);
         }
 
-        if (!events.length) return setStatus("No events in this range");
+        if (!events.length) throw new Error("No events received");
 
         // ✅ Always newest first
         events.sort((a, b) => new Date(b.time) - new Date(a.time));
@@ -683,13 +685,146 @@ async function fetchNewEvents() {
         // Add all quakes, but only animate/sound the newest
         events.forEach(ev => addOrUpdateEventMarker(ev, ev.id === latest.id, ev.id === latest.id));
 
-        // ✅ remember which quake is newest
-        latestEarthquakeId = latest.id;
+        // ✅ Cache successful result
+        localStorage.setItem(cacheKey, JSON.stringify(events));
+        localStorage.setItem(cacheTimeKey, Date.now().toString());
 
+        latestEarthquakeId = latest.id;
         setStatus(`Fetched ${events.length} events — latest: ${latest.location} (M${latest.magnitude})`);
+
     } catch (e) {
-        console.error(e);
-        setStatus("Error fetching events: " + e.message);
+        console.warn("⚠️ PHIVOLCS fetch failed:", e.message);
+        setStatus("Website down — switching to Facebook fallback...");
+
+        // 🧠 Try PHIVOLCS Facebook RSS fallback
+        try {
+            console.warn("[EarthquakeMonitor] Website down — switching to Facebook fallback...");
+
+            // ⚠️ Show red warning banner BELOW the header bar (responsive)
+            let banner = document.querySelector("#fallbackBanner");
+            if (!banner) {
+                const header = document.querySelector(".header-bar");
+                const headerHeight = header ? header.offsetHeight : 60;
+
+                banner = document.createElement("div");
+                banner.id = "fallbackBanner";
+                banner.textContent = "PHIVOLCS WEBSITE IS DOWN";
+
+                Object.assign(banner.style, {
+                    position: "fixed",
+                    top: `${headerHeight + 10}px`, // slightly more space below header
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "#c62828",
+                    color: "#fff",
+                    fontWeight: "600",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    textAlign: "center",
+                    padding: "10px 8px", // more horizontal + vertical padding
+                    zIndex: "3000",
+                    boxShadow: "0 3px 8px rgba(0,0,0,0.3)",
+                    fontSize: "clamp(13px, 2.2vw, 17px)", // a lil more readable
+                    lineHeight: "1.5", // improved text spacing
+                    wordBreak: "break-word",
+                    boxSizing: "border-box",
+                    borderRadius: "10px", // smoother corners
+                    maxWidth: "90vw",
+                    whiteSpace: "normal",
+                    textWrap: "balance", // makes wrapping more natural (modern browsers)
+                });
+
+                document.body.appendChild(banner);
+
+                // Adjust banner position on resize/orientation change
+                window.addEventListener("resize", () => {
+                    const newHeaderHeight = header ? header.offsetHeight : 60;
+                    banner.style.top = `${newHeaderHeight + 8}px`;
+                });
+            }
+
+
+            addNotification("PHIVOLCS DATA FALLBACK", "Using Facebook feed data (website may be down)", true);
+
+            const rssRes = await fetch("https://rss.app/feeds/U6XZP9zYYmVM8EiP.xml");
+            const rssText = await rssRes.text();
+
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(rssText, "text/xml");
+            const items = [...xml.querySelectorAll("item")];
+            if (!items.length) throw new Error("No Facebook RSS items found");
+
+            const fallbackEvents = [];
+
+            items.forEach((item, index) => {
+                const raw = item.querySelector("description")?.textContent || "";
+                const cleanText = raw
+                    .replace(/<[^>]+>/g, "")           // remove HTML
+                    .replace(/#\S+/g, "")              // remove hashtags
+                    .replace(/https?:\/\/\S+/g, "")    // remove link
+                    .replace(/\s+/g, " ")              // normalize spaces
+                    .trim();
+
+                // Extract fields
+                const magnitude = parseFloat(cleanText.match(/Magnitude\s*=?\s*([\d.]+)/i)?.[1] || 0);
+                const depth = parseFloat(cleanText.match(/Depth\s*=?\s*(\d+)/i)?.[1] || 0);
+                const lat = parseFloat(cleanText.match(/Location\s*=\s*([0-9.]+)°\s*[NS]/i)?.[1] || 0);
+                const lon = parseFloat(cleanText.match(/,\s*([0-9.]+)°\s*[EW]/i)?.[1] || 0);
+
+                const dateMatch = cleanText.match(/Date and Time:\s*(.+?)(?=Magnitude|$)/i);
+                const time = dateMatch ? dateMatch[1].trim() : "Unknown time";
+
+                // Extract human-readable place
+                const locMatch = cleanText.match(/E of (.+?)\)/i);
+                const location = locMatch ? locMatch[1].trim() : "Philippines";
+
+                if (lat && lon) {
+                    fallbackEvents.push({
+                        id: `fb_${index}`,
+                        lat,
+                        lon,
+                        magnitude,
+                        depth,
+                        time,
+                        location,
+                        link: null // no clickable link in popup
+                    });
+                }
+            });
+
+            if (!fallbackEvents.length) throw new Error("No valid earthquake entries found in Facebook feed");
+
+            // Sort newest first
+            fallbackEvents.sort((a, b) => new Date(b.time) - new Date(a.time));
+            const latest = fallbackEvents[0];
+
+            // Add markers (triangles/circles + animation)
+            fallbackEvents.forEach(ev => addOrUpdateEventMarker(ev, ev.id === latest.id, ev.id === latest.id));
+
+            latestEarthquakeId = latest.id;
+            setStatus(`Fallback: Showing ${fallbackEvents.length} events from Facebook feed`);
+
+            // Cache fallback data
+            localStorage.setItem("cachedEarthquakes", JSON.stringify(fallbackEvents));
+            localStorage.setItem("cachedEarthquakesTime", Date.now().toString());
+
+        } catch (fbErr) {
+            console.error("❌ Facebook fallback also failed:", fbErr);
+            setStatus("All sources unavailable");
+
+            const cached = localStorage.getItem("cachedEarthquakes");
+            const cachedTime = localStorage.getItem("cachedEarthquakesTime");
+            if (cached) {
+                const events = JSON.parse(cached);
+                const ageMins = Math.floor((Date.now() - cachedTime) / 60000);
+                setStatus(`Showing cached earthquakes (saved ${ageMins} min ago)`);
+                events.forEach(ev => addOrUpdateEventMarker(ev, false, false));
+            } else {
+                setStatus("No cached earthquakes available 😕");
+            }
+        }
+
     }
 }
 
@@ -770,13 +905,13 @@ document.getElementById("btnTestAlarm").addEventListener("click", () => {
         id: "TEST_ALARM_" + Date.now(),
         lat: userLocation ? userLocation.lat + (Math.random() - 0.5) * 0.5 : 12.8797,
         lon: userLocation ? userLocation.lon + (Math.random() - 0.5) * 0.5 : 121.7740,
-        magnitude: 5.5,
+        magnitude: 4.5,
         depth: 10 + Math.random() * 50,
         time: new Date().toISOString(),
         location: "Test Alarm Location (5.0+ Magnitude)"
     };
 
-    console.log("🚨 Testing 5.0+ magnitude alarm...");
+    console.log("🚨 Testing 4.5+ magnitude alarm...");
     addOrUpdateEventMarker(normalizeEvent(testEv), true, true);
 });
 
@@ -1232,114 +1367,114 @@ function initLocationButton() {
  * Browser checks and access blocking overlay
  ************************************************************************/
 function isInAppBrowser() {
-  const ua = navigator.userAgent || navigator.vendor || window.opera;
-  return (
-    ua.includes("FBAN") || ua.includes("FBAV") || // Facebook/Messenger
-    ua.includes("Instagram") ||
-    ua.includes("Line/") ||
-    ua.includes("TikTok") ||
-    ua.includes("Twitter")
-  );
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    return (
+        ua.includes("FBAN") || ua.includes("FBAV") || // Facebook/Messenger
+        ua.includes("Instagram") ||
+        ua.includes("Line/") ||
+        ua.includes("TikTok") ||
+        ua.includes("Twitter")
+    );
 }
 
 function isSupportedBrowser() {
-  const ua = navigator.userAgent.toLowerCase();
-  return ua.includes("chrome") || ua.includes("safari");
+    const ua = navigator.userAgent.toLowerCase();
+    return ua.includes("chrome") || ua.includes("safari");
 }
 
 // Show overlay that prevents interaction
 function showBrowserBlocker(message) {
-  const blocker = document.createElement("div");
-  blocker.style.position = "fixed";
-  blocker.style.top = 0;
-  blocker.style.left = 0;
-  blocker.style.width = "100vw";
-  blocker.style.height = "100vh";
-  blocker.style.background = "#500707ff";
-  blocker.style.color = "#fff";
-  blocker.style.display = "flex";
-  blocker.style.flexDirection = "column";
-  blocker.style.alignItems = "center";
-  blocker.style.justifyContent = "center";
-  blocker.style.zIndex = 99999;
-  blocker.style.fontFamily = "system-ui, sans-serif";
-  blocker.innerHTML = `
+    const blocker = document.createElement("div");
+    blocker.style.position = "fixed";
+    blocker.style.top = 0;
+    blocker.style.left = 0;
+    blocker.style.width = "100vw";
+    blocker.style.height = "100vh";
+    blocker.style.background = "#500707ff";
+    blocker.style.color = "#fff";
+    blocker.style.display = "flex";
+    blocker.style.flexDirection = "column";
+    blocker.style.alignItems = "center";
+    blocker.style.justifyContent = "center";
+    blocker.style.zIndex = 99999;
+    blocker.style.fontFamily = "system-ui, sans-serif";
+    blocker.innerHTML = `
     <h2 style="font-size:1.5rem;margin-bottom:1rem;">Unsupported Browser</h2>
     <p style="max-width:80%;text-align:center;">
       ${message}<br><br>
       Please open this page using <b>Chrome</b> or <b>Safari</b> for full functionality. Please continue by copy pasting the link to any official web browsers.
     </p>
   `;
-  document.body.innerHTML = ""; // clear existing content
-  document.body.appendChild(blocker);
+    document.body.innerHTML = ""; // clear existing content
+    document.body.appendChild(blocker);
 }
 
 // Run browser check as soon as page loads
 window.addEventListener("load", () => {
-  if (isInAppBrowser()) {
-    showBrowserBlocker("In-app browsers (like Messenger, Instagram, or TikTok) block location access.");
-  } else if (!isSupportedBrowser()) {
-    showBrowserBlocker("Your current browser isn’t supported.");
-  }
+    if (isInAppBrowser()) {
+        showBrowserBlocker("In-app browsers (like Messenger, Instagram, or TikTok) block location access.");
+    } else if (!isSupportedBrowser()) {
+        showBrowserBlocker("Your current browser isn’t supported.");
+    }
 });
 
 /************************************************************************
  * Request location (only called after user gesture)
  ************************************************************************/
 async function requestLocationPermission(forceAsk = false) {
-  if (!("geolocation" in navigator)) {
-    alert("Geolocation not supported by this browser.");
-    return false;
-  }
+    if (!("geolocation" in navigator)) {
+        alert("Geolocation not supported by this browser.");
+        return false;
+    }
 
-  if (location.protocol !== "https:" && location.hostname !== "localhost") {
-    alert("⚠️ Location access requires HTTPS. Please use a secure (https://) site.");
-    return false;
-  }
+    if (location.protocol !== "https:" && location.hostname !== "localhost") {
+        alert("⚠️ Location access requires HTTPS. Please use a secure (https://) site.");
+        return false;
+    }
 
-  let state = "prompt";
-  try {
-    const status = await navigator.permissions.query({ name: "geolocation" });
-    state = status.state;
-  } catch {}
+    let state = "prompt";
+    try {
+        const status = await navigator.permissions.query({ name: "geolocation" });
+        state = status.state;
+    } catch { }
 
-  if (state === "granted" && !forceAsk) return getAndStoreUserLocation();
+    if (state === "granted" && !forceAsk) return getAndStoreUserLocation();
 
-  if (state === "prompt" || forceAsk) {
-    return new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          userLocation = {
-            lat: pos.coords.latitude,
-            lon: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-          };
-          console.log("✅ Location obtained:", userLocation);
-          localStorage.setItem("locationPermission", "granted");
-          addUserMarker();
-          resolve(true);
-        },
-        (err) => {
-          console.warn("⚠️ Location error:", err);
-          if (err.code === 1)
-            alert("🚫 Location permission denied. Please allow access to continue.");
-          else
-            alert("Unable to get location. " + err.message);
-          localStorage.setItem("locationPermission", "denied");
-          resolve(false);
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-      );
-    });
-  }
+    if (state === "prompt" || forceAsk) {
+        return new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    userLocation = {
+                        lat: pos.coords.latitude,
+                        lon: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy,
+                    };
+                    console.log("✅ Location obtained:", userLocation);
+                    localStorage.setItem("locationPermission", "granted");
+                    addUserMarker();
+                    resolve(true);
+                },
+                (err) => {
+                    console.warn("⚠️ Location error:", err);
+                    if (err.code === 1)
+                        alert("🚫 Location permission denied. Please allow access to continue.");
+                    else
+                        alert("Unable to get location. " + err.message);
+                    localStorage.setItem("locationPermission", "denied");
+                    resolve(false);
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+            );
+        });
+    }
 
-  if (state === "denied") {
-    alert(
-      "Location access has been blocked.\n\n" +
-        "Please go to your browser settings > Site Settings > Allow Location."
-    );
-    return false;
-  }
+    if (state === "denied") {
+        alert(
+            "Location access has been blocked.\n\n" +
+            "Please go to your browser settings > Site Settings > Allow Location."
+        );
+        return false;
+    }
 }
 
 
