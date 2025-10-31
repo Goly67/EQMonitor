@@ -11,18 +11,65 @@ const panel = document.getElementById('controls');
 const burgerMenuBtn = document.getElementById('burgerMenuBtn');
 const menuOverlay = document.getElementById('menuOverlay');
 
-function isInAppBrowser() {
-    const ua = navigator.userAgent || navigator.vendor || window.opera;
-    return /FBAN|FBAV|Instagram|Messenger|TikTok/i.test(ua);
+function showCustomAlert(message) {
+  // remove existing alert if open
+  const oldAlert = document.getElementById("customAlert");
+  if (oldAlert) oldAlert.remove();
+
+  const alertBox = document.createElement("div");
+  alertBox.id = "customAlert";
+  alertBox.style.position = "fixed";
+  alertBox.style.top = 0;
+  alertBox.style.left = 0;
+  alertBox.style.width = "100vw";
+  alertBox.style.height = "100vh";
+  alertBox.style.background = "rgba(0,0,0,0.65)";
+  alertBox.style.display = "flex";
+  alertBox.style.alignItems = "center";
+  alertBox.style.justifyContent = "center";
+  alertBox.style.zIndex = "999999";
+
+  alertBox.innerHTML = `
+    <div style="
+      background:#99221c;
+      padding:20px;
+      border-radius:14px;
+      max-width:350px;
+      width:90%;
+      font-family:system-ui;
+      text-align:center;
+      box-shadow:0 8px 20px rgba(0,0,0,0.25);
+      animation: pop .25s ease;
+    ">
+      <div style="font-size:20px;font-weight:600;margin-bottom:8px;"><b>ALERT</b></div>
+      <div style="font-size:15px;margin-bottom:18px;">${message}</div>
+      <button id="alertOkBtn" style="
+        background:#0078ff;
+        border:none;
+        padding:10px 18px;
+        border-radius:10px;
+        color:white;
+        cursor:pointer;
+        font-size:15px;
+        width:100%;
+      ">Okay</button>
+    </div>
+
+    <style>
+    @keyframes pop {
+      0% { transform:scale(.85); opacity:0; }
+      100% { transform:scale(1); opacity:1; }
+    }
+    </style>
+  `;
+
+  document.body.appendChild(alertBox);
+  document.getElementById("alertOkBtn").onclick = () => alertBox.remove();
 }
 
-function isIOS() {
-    return /iPhone|iPad|iPod/i.test(navigator.userAgent);
-}
-
-function isAndroid() {
-    return /Android/i.test(navigator.userAgent);
-}
+/* window.addEventListener("load", () => {
+    showCustomAlert("Custom alert system active and running!");
+}); */
 
 // Burger menu toggle
 burgerMenuBtn.addEventListener('click', function () {
@@ -905,7 +952,7 @@ document.getElementById("btnUnlockAudio").addEventListener("click", () => {
 
 document.getElementById("btnTestAlarm").addEventListener("click", () => {
     if (!audioUnlocked) {
-        alert("Please unlock audio first by clicking 'Unlock Audio' button");
+        showCustomAlert("Please unlock audio first by clicking 'Unlock Audio' button");
         return;
     }
 
@@ -1348,7 +1395,7 @@ function initLocationButton() {
     // Adjust text/button for mobile in JS (content can’t be changed via CSS alone)
     if (window.innerWidth <= 480) {
         bar.querySelector(".location-bar-text").textContent = "Allow access to show your location";
-        bar.querySelector("#enableLocationBtn").textContent = "Enable Access";
+        bar.querySelector("#enableLocationBtn").textContent = "Enable access to show your location";
     }
 
     // Button click handling
@@ -1376,12 +1423,12 @@ function initLocationButton() {
  ************************************************************************/
 async function requestLocationPermission(forceAsk = false) {
     if (!("geolocation" in navigator)) {
-        alert("Geolocation not supported by this browser.");
+        showCustomAlert("Geolocation not supported by this browser.");
         return false;
     }
 
     if (location.protocol !== "https:" && location.hostname !== "localhost") {
-        alert("⚠️ Location access requires HTTPS. Please use a secure (https://) site.");
+        showCustomAlert("⚠️ Location access requires HTTPS. Please use a secure (https://) site.");
         return false;
     }
 
@@ -1410,9 +1457,9 @@ async function requestLocationPermission(forceAsk = false) {
                 (err) => {
                     console.warn("⚠️ Location error:", err);
                     if (err.code === 1)
-                        alert("I think you are using an unofficial browser, please proceed to chrome or safari for location access.");
+                        showCustomAlert("This is an unofficial browser! Please proceed to chrome or safari for location access.");
                     else
-                        alert("Unable to get location. " + err.message);
+                        showCustomAlert("Unable to get location. " + err.message);
                     localStorage.setItem("locationPermission", "denied");
                     resolve(false);
                 },
@@ -1422,7 +1469,7 @@ async function requestLocationPermission(forceAsk = false) {
     }
 
     if (state === "denied") {
-        alert(
+        showCustomAlert(
             "Location access has been blocked.\n\n" +
             "Please go to your browser settings > Site Settings > Allow Location."
         );
