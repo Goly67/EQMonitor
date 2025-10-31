@@ -12,16 +12,16 @@ const burgerMenuBtn = document.getElementById('burgerMenuBtn');
 const menuOverlay = document.getElementById('menuOverlay');
 
 function isInAppBrowser() {
-  const ua = navigator.userAgent || navigator.vendor || window.opera;
-  return /FBAN|FBAV|Instagram|Messenger|TikTok/i.test(ua);
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    return /FBAN|FBAV|Instagram|Messenger|TikTok/i.test(ua);
 }
 
 function isIOS() {
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
 function isAndroid() {
-  return /Android/i.test(navigator.userAgent);
+    return /Android/i.test(navigator.userAgent);
 }
 
 // Burger menu toggle
@@ -1411,6 +1411,15 @@ function showBrowserBlocker(message) {
         // Android Chrome intent
         btnHref = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end;`;
     }
+
+    btnHref = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end;`;
+    btn.setAttribute("data-fallback", `googlechrome://${window.location.host}${window.location.pathname}`);
+
+    btn.addEventListener("click", () => {
+        setTimeout(() => {
+            window.location.href = btn.getAttribute("data-fallback");
+        }, 500);
+    });
 
     const blocker = document.createElement("div");
     Object.assign(blocker.style, {
