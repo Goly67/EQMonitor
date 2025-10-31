@@ -1457,7 +1457,7 @@ async function requestLocationPermission(forceAsk = false) {
                 (err) => {
                     console.warn("⚠️ Location error:", err);
                     if (err.code === 1)
-                        showCustomAlert("This is an unofficial browser! Please proceed to chrome or safari for location access.");
+                        showCustomAlert("This is an unofficial browser!<br>Please proceed to chrome or safari for location access.");
                     else
                         showCustomAlert("Unable to get location. " + err.message);
                     localStorage.setItem("locationPermission", "denied");
