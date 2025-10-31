@@ -1412,15 +1412,6 @@ function showBrowserBlocker(message) {
         btnHref = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end;`;
     }
 
-    btnHref = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end;`;
-    btn.setAttribute("data-fallback", `googlechrome://${window.location.host}${window.location.pathname}`);
-
-    btn.addEventListener("click", () => {
-        setTimeout(() => {
-            window.location.href = btn.getAttribute("data-fallback");
-        }, 500);
-    });
-
     const blocker = document.createElement("div");
     Object.assign(blocker.style, {
         position: "fixed",
@@ -1451,6 +1442,15 @@ function showBrowserBlocker(message) {
     btn.textContent = btnText;
     btn.href = btnHref;
     btn.target = target;
+
+    // ✅ Android fallback logic goes here (AFTER defining btn)
+    btn.setAttribute("data-fallback", `googlechrome://${window.location.host}${window.location.pathname}`);
+
+    btn.addEventListener("click", () => {
+        setTimeout(() => {
+            window.location.href = btn.getAttribute("data-fallback");
+        }, 500);
+    });
 
     Object.assign(btn.style, {
         marginTop: "20px",
