@@ -12,16 +12,16 @@ const burgerMenuBtn = document.getElementById('burgerMenuBtn');
 const menuOverlay = document.getElementById('menuOverlay');
 
 function isInAppBrowser() {
-  const ua = navigator.userAgent || navigator.vendor || window.opera;
-  return /FBAN|FBAV|Instagram|Messenger|TikTok/i.test(ua);
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    return /FBAN|FBAV|Instagram|Messenger|TikTok/i.test(ua);
 }
 
 function isIOS() {
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
 function isAndroid() {
-  return /Android/i.test(navigator.userAgent);
+    return /Android/i.test(navigator.userAgent);
 }
 
 // Burger menu toggle
@@ -1390,6 +1390,18 @@ function isSupportedBrowser() {
     return ua.includes("chrome") || ua.includes("safari");
 }
 
+let btnText = "Open in Browser";
+let btnHref = currentURL;
+
+if (isIOS) {
+    btnText = "Open in Safari";
+    btnHref = window.location.href; // real URL, not encoded
+} else if (isAndroid) {
+    btnText = "Open in Chrome";
+    btnHref = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end;`;
+}
+
+
 function showBrowserBlocker(message) {
     const ua = navigator.userAgent || navigator.vendor || window.opera;
     const currentURL = encodeURIComponent(window.location.href);
@@ -1397,34 +1409,39 @@ function showBrowserBlocker(message) {
     const isIOS = /iPhone|iPad|iPod/i.test(ua);
     const isAndroid = /Android/i.test(ua);
 
-    // choose button label + action
     let btnText = "Open in Browser";
-    let action = () => window.open(currentURL, "_blank");
+    let action = () => window.location.href = currentURL;
 
     if (isIOS) {
         btnText = "Open in Safari";
-        action = () => window.open(currentURL, "_blank"); // opens in Safari
+        action = () => {
+            window.location.href = currentURL; // fallback
+            setTimeout(() => window.open(currentURL, "_blank"), 200);
+        };
     } else if (isAndroid) {
         btnText = "Open in Chrome";
-        action = () => window.location.href = `googlechrome://navigate?url=${currentURL}`;
+        action = () => {
+            window.location.href = `intent://${window.location.host}#Intent;scheme=https;package=com.android.chrome;end;`;
+            setTimeout(() => window.open(window.location.href, "_blank"), 300);
+        };
     }
 
     const blocker = document.createElement("div");
-    blocker.style.position = "fixed";
-    blocker.style.top = 0;
-    blocker.style.left = 0;
-    blocker.style.width = "100vw";
-    blocker.style.height = "100vh";
-    blocker.style.background = "#500707ff";
-    blocker.style.color = "#fff";
-    blocker.style.display = "flex";
-    blocker.style.flexDirection = "column";
-    blocker.style.alignItems = "center";
-    blocker.style.justifyContent = "center";
-    blocker.style.zIndex = 99999;
-    blocker.style.fontFamily = "system-ui, sans-serif";
-    blocker.style.textAlign = "center";
-    blocker.style.padding = "20px";
+    Object.assign(blocker.style, {
+        position: "fixed",
+        top: 0, left: 0,
+        width: "100vw", height: "100vh",
+        background: "#500707ff",
+        color: "#fff",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 99999,
+        fontFamily: "system-ui, sans-serif",
+        textAlign: "center",
+        padding: "20px",
+    });
 
     blocker.innerHTML = `
         <h2 style="font-size:1.5rem;margin-bottom:1rem;">Unsupported Browser</h2>
@@ -1434,27 +1451,30 @@ function showBrowserBlocker(message) {
         </p>
     `;
 
-    // create the button
-    const btn = document.createElement("button");
+    const btn = document.createElement("a");
     btn.textContent = btnText;
-    btn.style.marginTop = "20px";
-    btn.style.padding = "12px 20px";
-    btn.style.background = "#ffffff";
-    btn.style.color = "#000";
-    btn.style.border = "none";
-    btn.style.borderRadius = "30px";
-    btn.style.fontSize = "1rem";
-    btn.style.cursor = "pointer";
-    btn.style.fontWeight = "600";
-    btn.style.boxShadow = "0 3px 8px rgba(0,0,0,0.4)";
 
-    btn.addEventListener("click", action);
+    Object.assign(btn.style, {
+        marginTop: "20px",
+        padding: "12px 20px",
+        background: "#fff",
+        color: "#000",
+        borderRadius: "30px",
+        fontSize: "1rem",
+        fontWeight: "600",
+        textDecoration: "none",
+        display: "inline-block",
+        boxShadow: "0 3px 8px rgba(0,0,0,0.4)"
+    });
 
+    btn.href = btnHref;
+    btn.target = "_top"; // critical for iOS/IG/FB
+
+    document.body.style.margin = "0";
     document.body.innerHTML = "";
     document.body.appendChild(blocker);
     blocker.appendChild(btn);
 }
-
 
 // Run browser check as soon as page loads
 window.addEventListener("load", () => {
