@@ -148,7 +148,7 @@ const CONFIG = {
 let currentSource = "phivolcs";
 
 
-let circleScale = 0.2;
+let circleScale = 0.5;
 let currentRange = { start: null, end: null };
 const markers = new Map();
 let latestMarker = null;
@@ -845,11 +845,6 @@ function limitMarkers() {
 /************************************************************************
  * CONTROLS
  ************************************************************************/
-document.getElementById("circleScale").addEventListener("input", e => {
-    circleScale = parseFloat(e.target.value);
-    markers.forEach(({ layer, data }) => layer.setRadius(magToRadius(data.magnitude)));
-});
-
 document.getElementById("dateFilter").addEventListener("change", e => {
     const val = e.target.value;
     if (val === "custom") {
