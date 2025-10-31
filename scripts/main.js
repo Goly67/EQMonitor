@@ -12,16 +12,16 @@ const burgerMenuBtn = document.getElementById('burgerMenuBtn');
 const menuOverlay = document.getElementById('menuOverlay');
 
 function isInAppBrowser() {
-    const ua = navigator.userAgent || navigator.vendor || window.opera;
-    return /FBAN|FBAV|Instagram|Messenger|TikTok/i.test(ua);
+  const ua = navigator.userAgent || navigator.vendor || window.opera;
+  return /FBAN|FBAV|Instagram|Messenger|TikTok/i.test(ua);
 }
 
 function isIOS() {
-    return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
 function isAndroid() {
-    return /Android/i.test(navigator.userAgent);
+  return /Android/i.test(navigator.userAgent);
 }
 
 // Burger menu toggle
@@ -1390,40 +1390,26 @@ function isSupportedBrowser() {
     return ua.includes("chrome") || ua.includes("safari");
 }
 
-let btnText = "Open in Browser";
-let btnHref = currentURL;
-
-if (isIOS) {
-    btnText = "Open in Safari";
-    btnHref = window.location.href; // real URL, not encoded
-} else if (isAndroid) {
-    btnText = "Open in Chrome";
-    btnHref = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end;`;
-}
-
-
 function showBrowserBlocker(message) {
     const ua = navigator.userAgent || navigator.vendor || window.opera;
-    const currentURL = encodeURIComponent(window.location.href);
+
+    const rawURL = window.location.href;
+    const currentURL = encodeURIComponent(rawURL);
 
     const isIOS = /iPhone|iPad|iPod/i.test(ua);
     const isAndroid = /Android/i.test(ua);
 
     let btnText = "Open in Browser";
-    let action = () => window.location.href = currentURL;
+    let btnHref = rawURL;
+    let target = "_top"; // break out of in-app frame
 
     if (isIOS) {
         btnText = "Open in Safari";
-        action = () => {
-            window.location.href = currentURL; // fallback
-            setTimeout(() => window.open(currentURL, "_blank"), 200);
-        };
+        btnHref = rawURL; // iOS must use real URL
     } else if (isAndroid) {
         btnText = "Open in Chrome";
-        action = () => {
-            window.location.href = `intent://${window.location.host}#Intent;scheme=https;package=com.android.chrome;end;`;
-            setTimeout(() => window.open(window.location.href, "_blank"), 300);
-        };
+        // Android Chrome intent
+        btnHref = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end;`;
     }
 
     const blocker = document.createElement("div");
@@ -1451,24 +1437,26 @@ function showBrowserBlocker(message) {
         </p>
     `;
 
+    // ✅ use <a> tag instead — works in iOS in-app browsers
     const btn = document.createElement("a");
     btn.textContent = btnText;
+    btn.href = btnHref;
+    btn.target = target;
 
     Object.assign(btn.style, {
         marginTop: "20px",
         padding: "12px 20px",
         background: "#fff",
         color: "#000",
+        border: "none",
         borderRadius: "30px",
         fontSize: "1rem",
+        cursor: "pointer",
         fontWeight: "600",
         textDecoration: "none",
         display: "inline-block",
-        boxShadow: "0 3px 8px rgba(0,0,0,0.4)"
+        boxShadow: "0 3px 8px rgba(0,0,0,0.4)",
     });
-
-    btn.href = btnHref;
-    btn.target = "_top"; // critical for iOS/IG/FB
 
     document.body.style.margin = "0";
     document.body.innerHTML = "";
