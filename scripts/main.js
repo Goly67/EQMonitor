@@ -1372,117 +1372,6 @@ function initLocationButton() {
 }
 
 /************************************************************************
- * Browser checks and access blocking overlay
- ************************************************************************/
-function isInAppBrowser() {
-    const ua = navigator.userAgent || navigator.vendor || window.opera;
-    return (
-        ua.includes("FBAN") || ua.includes("FBAV") || // Facebook/Messenger
-        ua.includes("Instagram") ||
-        ua.includes("Line/") ||
-        ua.includes("TikTok") ||
-        ua.includes("Twitter")
-    );
-}
-
-function isSupportedBrowser() {
-    const ua = navigator.userAgent.toLowerCase();
-    return ua.includes("chrome") || ua.includes("safari");
-}
-
-function showBrowserBlocker(message) {
-    const ua = navigator.userAgent || navigator.vendor || window.opera;
-
-    const rawURL = window.location.href;
-    const currentURL = encodeURIComponent(rawURL);
-
-    const isIOS = /iPhone|iPad|iPod/i.test(ua);
-    const isAndroid = /Android/i.test(ua);
-
-    let btnText = "Open in Browser";
-    let btnHref = rawURL;
-    let target = "_top"; // break out of in-app frame
-
-    if (isIOS) {
-        btnText = "Open in Safari";
-        btnHref = rawURL; // iOS must use real URL
-    } else if (isAndroid) {
-        btnText = "Open in Chrome";
-        // Android Chrome intent
-        btnHref = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end;`;
-    }
-
-    const blocker = document.createElement("div");
-    Object.assign(blocker.style, {
-        position: "fixed",
-        top: 0, left: 0,
-        width: "100vw", height: "100vh",
-        background: "#500707ff",
-        color: "#fff",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 99999,
-        fontFamily: "system-ui, sans-serif",
-        textAlign: "center",
-        padding: "20px",
-    });
-
-    blocker.innerHTML = `
-        <h2 style="font-size:1.5rem;margin-bottom:1rem;">Unsupported Browser</h2>
-        <p style="max-width:80%;font-size:1rem;line-height:1.4;">
-            ${message}<br><br>
-            Please open this page using <b>Chrome</b> or <b>Safari</b> for full functionality.
-        </p>
-    `;
-
-    // ✅ use <a> tag instead — works in iOS in-app browsers
-    const btn = document.createElement("a");
-    btn.textContent = btnText;
-    btn.href = btnHref;
-    btn.target = target;
-
-    // ✅ Android fallback logic goes here (AFTER defining btn)
-    btn.setAttribute("data-fallback", `googlechrome://${window.location.host}${window.location.pathname}`);
-
-    btn.addEventListener("click", () => {
-        setTimeout(() => {
-            window.location.href = btn.getAttribute("data-fallback");
-        }, 500);
-    });
-
-    Object.assign(btn.style, {
-        marginTop: "20px",
-        padding: "12px 20px",
-        background: "#fff",
-        color: "#000",
-        border: "none",
-        borderRadius: "30px",
-        fontSize: "1rem",
-        cursor: "pointer",
-        fontWeight: "600",
-        textDecoration: "none",
-        display: "inline-block",
-        boxShadow: "0 3px 8px rgba(0,0,0,0.4)",
-    });
-
-    document.body.style.margin = "0";
-    document.body.innerHTML = "";
-    document.body.appendChild(blocker);
-    blocker.appendChild(btn);
-}
-
-// Run browser check as soon as page loads
-window.addEventListener("load", () => {
-    if (isInAppBrowser()) {
-        showBrowserBlocker("In-app browsers (like Messenger, Instagram, or TikTok) block location access.");
-    } else if (!isSupportedBrowser()) {
-        showBrowserBlocker("Your current browser isn’t supported.");
-    }
-});
-
-/************************************************************************
  * Request location (only called after user gesture)
  ************************************************************************/
 async function requestLocationPermission(forceAsk = false) {
@@ -1521,7 +1410,7 @@ async function requestLocationPermission(forceAsk = false) {
                 (err) => {
                     console.warn("⚠️ Location error:", err);
                     if (err.code === 1)
-                        alert("🚫 Location permission denied. Please allow access to continue.");
+                        alert("I think you are using an unofficial browser, please proceed to chrome or safari for location access.");
                     else
                         alert("Unable to get location. " + err.message);
                     localStorage.setItem("locationPermission", "denied");
