@@ -1402,7 +1402,7 @@ function showBrowserBlocker(message) {
     <h2 style="font-size:1.5rem;margin-bottom:1rem;">Unsupported Browser</h2>
     <p style="max-width:80%;text-align:center;">
       ${message}<br><br>
-      Please open this page using <b>Chrome</b> or <b>Safari</b> for full functionality. <h2>Please continue by <b>copy pasting</b> the link to any <b>official web browsers.</b></h2>
+      Please open this page using <b>Chrome</b> or <b>Safari</b> for full functionality. <h2 style="max-width:80%;text-align:center;>Please continue by copy pasting the link to any official web browsers.</h2>
     </p>
   `;
     document.body.innerHTML = ""; // clear existing content
