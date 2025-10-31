@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Maintenance - Earthquake Monitoring System</title>
+    <link rel="stylesheet" href="styles/sermain.css">
+</head>
+
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">EMS</div>
+            <div class="header-subtitle">Earthquake Monitoring System - Scheduled Maintenance</div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="maintenance-alert">
+            <div class="alert-title">
+                <span class="alert-icon">⚠️</span>
+                System Under Maintenance
+            </div>
+            <p class="alert-message">
+                Our Earthquake Monitoring System is currently undergoing scheduled maintenance to enhance performance
+                and add new features.
+            </p>
+        </div>
+
+        <div class="countdown-section">
+            <div class="countdown-title">Estimated Time Until System Restoration</div>
+
+            <div class="countdown-timer">
+                <div class="time-unit">
+                    <div class="time-value" id="days">00</div>
+                    <div class="time-label">Days</div>
+                </div>
+                <div class="time-unit">
+                    <div class="time-value" id="hours">00</div>
+                    <div class="time-label">Hours</div>
+                </div>
+                <div class="time-unit">
+                    <div class="time-value" id="minutes">00</div>
+                    <div class="time-label">Minutes</div>
+                </div>
+                <div class="time-unit">
+                    <div class="time-value" id="seconds">00</div>
+                    <div class="time-label">Seconds</div>
+                </div>
+            </div>
+
+            <div class="progress-section">
+                <div class="progress-label">
+                    <span>Maintenance Progress</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="--progress-width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="status-indicator">
+                <span class="status-dot"></span>
+                In Progress
+            </div>
+        </div>
+
+        <div class="maintenance-info">
+            <div class="info-title">Maintenance Details</div>
+
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-item-label">Start Time</div>
+                    <div class="info-item-value" id="startTime">--:-- --</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-item-label">Estimated End</div>
+                    <div class="info-item-value" id="endTime">--:-- --</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-item-label">Type</div>
+                    <div class="info-item-value">System Affected by the new unofficial browser notification blocking.</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-item-label">Last Updated</div>
+                    <div class="info-item-value" id="lastUpdate">--:--</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-text">Thank you for your patience during our system maintenance.</div>
+        <div class="last-updated">Last updated: <span id="footerTime">--:--:--</span></div>
+    </footer>
+
+    <script defer src="scripts/sermain.js"></script>
+
+</body>
+
+</html>
