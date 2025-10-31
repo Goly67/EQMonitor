@@ -12,24 +12,24 @@ const burgerMenuBtn = document.getElementById('burgerMenuBtn');
 const menuOverlay = document.getElementById('menuOverlay');
 
 function showCustomAlert(message) {
-  // remove existing alert if open
-  const oldAlert = document.getElementById("customAlert");
-  if (oldAlert) oldAlert.remove();
+    // remove existing alert if open
+    const oldAlert = document.getElementById("customAlert");
+    if (oldAlert) oldAlert.remove();
 
-  const alertBox = document.createElement("div");
-  alertBox.id = "customAlert";
-  alertBox.style.position = "fixed";
-  alertBox.style.top = 0;
-  alertBox.style.left = 0;
-  alertBox.style.width = "100vw";
-  alertBox.style.height = "100vh";
-  alertBox.style.background = "rgba(0,0,0,0.65)";
-  alertBox.style.display = "flex";
-  alertBox.style.alignItems = "center";
-  alertBox.style.justifyContent = "center";
-  alertBox.style.zIndex = "999999";
+    const alertBox = document.createElement("div");
+    alertBox.id = "customAlert";
+    alertBox.style.position = "fixed";
+    alertBox.style.top = 0;
+    alertBox.style.left = 0;
+    alertBox.style.width = "100vw";
+    alertBox.style.height = "100vh";
+    alertBox.style.background = "rgba(0,0,0,0.65)";
+    alertBox.style.display = "flex";
+    alertBox.style.alignItems = "center";
+    alertBox.style.justifyContent = "center";
+    alertBox.style.zIndex = "999999";
 
-  alertBox.innerHTML = `
+    alertBox.innerHTML = `
     <div style="
       background:#99221c;
       padding:20px;
@@ -63,8 +63,8 @@ function showCustomAlert(message) {
     </style>
   `;
 
-  document.body.appendChild(alertBox);
-  document.getElementById("alertOkBtn").onclick = () => alertBox.remove();
+    document.body.appendChild(alertBox);
+    document.getElementById("alertOkBtn").onclick = () => alertBox.remove();
 }
 
 /* window.addEventListener("load", () => {
@@ -1457,9 +1457,10 @@ async function requestLocationPermission(forceAsk = false) {
                 (err) => {
                     console.warn("⚠️ Location error:", err);
                     if (err.code === 1)
-                        showCustomAlert("This is an unofficial browser!<br>Please proceed to chrome or safari for location access.");
+                        showCustomAlert(`This is an unofficial browser!<br>Please proceed to Chrome or Safari for location access.`);
                     else
-                        showCustomAlert("Unable to get location. " + err.message);
+                        showCustomAlert(`Unable to get location.<br>${err.message}`);
+
                     localStorage.setItem("locationPermission", "denied");
                     resolve(false);
                 },
