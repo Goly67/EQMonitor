@@ -11,42 +11,78 @@ const panel = document.getElementById('controls');
 const burgerMenuBtn = document.getElementById('burgerMenuBtn');
 const menuOverlay = document.getElementById('menuOverlay');
 
-// Load and display fault lines layers
 let faultLinesLayer = null;
 let harmonizedFaultLinesLayer = null;
 
+// Philippine bounds
+const philippinesBounds = {
+    north: 21,
+    south: 4,
+    east: 127,
+    west: 116
+};
+
+function isInPhilippines(feature) {
+    const coords = feature.geometry.coordinates;
+    if (feature.geometry.type === 'LineString') {
+        for (let point of coords) {
+            const [lng, lat] = point;
+            if (lat >= philippinesBounds.south && lat <= philippinesBounds.north &&
+                lng >= philippinesBounds.west && lng <= philippinesBounds.east) {
+                return true;
+            }
+        }
+    } else if (feature.geometry.type === 'MultiLineString') {
+        for (let line of coords) {
+            for (let point of line) {
+                const [lng, lat] = point;
+                if (lat >= philippinesBounds.south && lat <= philippinesBounds.north &&
+                    lng >= philippinesBounds.west && lng <= philippinesBounds.east) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 async function loadFaultLines() {
     try {
-        const response1 = await fetch('./scripts/gem_active_faults.geojson');
+        // Load gem_active_faults.geojson (faults)
+        const response1 = await fetch('./MultipleFiles/gem_active_faults.geojson');
         const data1 = await response1.json();
         faultLinesLayer = L.geoJSON(data1, {
+            filter: isInPhilippines,  // Only include Philippine faults
             style: {
                 color: 'red',
-                weight: 2,
-                opacity: 0.7
+                weight: 1.5,  // Thinner for mobile
+                opacity: 0.5  // Lower opacity to reduce rendering load
             }
         }).addTo(map);
 
-        const response2 = await fetch('./scripts/gem_active_faults_harmonized.geojson');
+        // Load gem_active_faults_harmonized.geojson (trenches/harmonized faults)
+        const response2 = await fetch('./MultipleFiles/gem_active_faults_harmonized.geojson');
         const data2 = await response2.json();
         harmonizedFaultLinesLayer = L.geoJSON(data2, {
+            filter: isInPhilippines,  // Only include Philippine trenches/faults
             style: {
                 color: 'blue',
-                weight: 1.5,
-                opacity: 0.6
+                weight: 1,  // Even thinner
+                opacity: 0.4,
+                dashArray: '5, 5'  // Dashed for trenches to distinguish
             }
         }).addTo(map);
 
-        console.log('Fault lines layers loaded successfully.');
+        console.log('Philippine fault and trench lines loaded successfully.');
     } catch (error) {
         console.error('Error loading fault lines:', error);
-        // Optional: Show user-friendly alert
-        showCustomAlert('Failed to load fault lines. Ensure files are accessible or host locally.');
+        showCustomAlert('Failed to load Philippine fault lines. Check file paths or hosting.');
     }
 }
 
-// Call this function on page load or map ready
+// Call this function on page load or map ready (automatic, no toggle)
 loadFaultLines();
+
 
 function showCustomAlert(message) {
     // remove existing alert if open
@@ -440,6 +476,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
             markers.set(prevData.id, { layer: oldCircle, data: prevData });
         }
     }
+
 
     let marker;
 
