@@ -11,6 +11,43 @@ const panel = document.getElementById('controls');
 const burgerMenuBtn = document.getElementById('burgerMenuBtn');
 const menuOverlay = document.getElementById('menuOverlay');
 
+// Load and display fault lines layers
+let faultLinesLayer = null;
+let harmonizedFaultLinesLayer = null;
+
+async function loadFaultLines() {
+    try {
+        const response1 = await fetch('./scripts/gem_active_faults.geojson');
+        const data1 = await response1.json();
+        faultLinesLayer = L.geoJSON(data1, {
+            style: {
+                color: 'red',
+                weight: 2,
+                opacity: 0.7
+            }
+        }).addTo(map);
+
+        const response2 = await fetch('./scripts/gem_active_faults_harmonized.geojson');
+        const data2 = await response2.json();
+        harmonizedFaultLinesLayer = L.geoJSON(data2, {
+            style: {
+                color: 'blue',
+                weight: 1.5,
+                opacity: 0.6
+            }
+        }).addTo(map);
+
+        console.log('Fault lines layers loaded successfully.');
+    } catch (error) {
+        console.error('Error loading fault lines:', error);
+        // Optional: Show user-friendly alert
+        showCustomAlert('Failed to load fault lines. Ensure files are accessible or host locally.');
+    }
+}
+
+// Call this function on page load or map ready
+loadFaultLines();
+
 function showCustomAlert(message) {
     // remove existing alert if open
     const oldAlert = document.getElementById("customAlert");
@@ -963,7 +1000,7 @@ document.getElementById("btnTestAlarm").addEventListener("click", () => {
         magnitude: 4.5,
         depth: 10 + Math.random() * 50,
         time: new Date().toISOString(),
-        location: "Test Alarm Location (4.5+ Magnitude)"
+        location: "Test Alarm Location (5.0+ Magnitude)"
     };
 
     console.log("🚨 Testing 4.5+ magnitude alarm...");
@@ -1091,7 +1128,7 @@ const eventSource = new EventSource("https://earthquakeapi.vercel.app/api/earthq
 function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
     if (!ev || !ev.lat || !ev.lon) return;
 
-    // Ignore duplicates
+    // ✅ Ignore duplicates
     if (markers.has(ev.id)) return;
 
     // If a previous latest exists and a new latest is incoming, revert previous latest to a circle
@@ -1272,14 +1309,14 @@ eventSource.onmessage = (event) => {
         const quake = JSON.parse(event.data);
         if (!quake || !quake.id) return;
 
-        // Skip duplicate quakes
+        // ✅ Skip duplicate quakes
         if (seenQuakes.has(quake.id)) return;
         seenQuakes.add(quake.id);
 
         latestEarthquakeId = quake.id;
         console.log("🚨 New unique earthquake detected via SSE:", quake);
 
-        // add new marker & animate once
+        // ✅ add new marker & animate once
         addOrUpdateEventMarker(normalizeEvent(quake), true, true);
 
         markUpdate();
@@ -1599,4 +1636,3 @@ setInterval(() => {
         window.location.reload();
     }
 }, 60000);
-
