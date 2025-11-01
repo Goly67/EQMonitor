@@ -11,6 +11,7 @@ const panel = document.getElementById('controls');
 const burgerMenuBtn = document.getElementById('burgerMenuBtn');
 const menuOverlay = document.getElementById('menuOverlay');
 
+
 let faultLinesLayer = null;
 let harmonizedFaultLinesLayer = null;
 
@@ -47,42 +48,39 @@ function isInPhilippines(feature) {
 }
 
 async function loadFaultLines() {
-    try {
-        // Load gem_active_faults.geojson (faults)
-        const response1 = await fetch('./scripts/gem_active_faults.geojson');
-        const data1 = await response1.json();
-        faultLinesLayer = L.geoJSON(data1, {
-            filter: isInPhilippines,  // Only include Philippine faults
-            style: {
-                color: 'red',
-                weight: 1.5,  // Thinner for mobile
-                opacity: 0.5  // Lower opacity to reduce rendering load
-            }
-        }).addTo(map);
+  try {
+    const response1 = await fetch('https://eq-monitor.vercel.app/scripts/gem_active_faults.geojson');
+    const data1 = await response1.json();
+    faultLinesLayer = L.geoJSON(data1, {
+      filter: isInPhilippines,
+      style: {
+        color: 'red',
+        weight: 1.5,
+        opacity: 0.5
+      }
+    }).addTo(map);
 
-        // Load gem_active_faults_harmonized.geojson (trenches/harmonized faults)
-        const response2 = await fetch('./scripts/gem_active_faults_harmonized.geojson');
-        const data2 = await response2.json();
-        harmonizedFaultLinesLayer = L.geoJSON(data2, {
-            filter: isInPhilippines,  // Only include Philippine trenches/faults
-            style: {
-                color: 'blue',
-                weight: 1,  // Even thinner
-                opacity: 0.4,
-                dashArray: '5, 5'  // Dashed for trenches to distinguish
-            }
-        }).addTo(map);
+    const response2 = await fetch('https://eq-monitor.vercel.app/scripts/gem_active_faults_harmonized.geojson');
+    const data2 = await response2.json();
+    harmonizedFaultLinesLayer = L.geoJSON(data2, {
+      filter: isInPhilippines,
+      style: {
+        color: 'blue',
+        weight: 1,
+        opacity: 0.4,
+        dashArray: '5, 5'
+      }
+    }).addTo(map);
 
-        console.log('Philippine fault and trench lines loaded successfully.');
-    } catch (error) {
-        console.error('Error loading fault lines:', error);
-        showCustomAlert('Failed to load Philippine fault lines. Check file paths or hosting.');
-    }
+    console.log('Philippine fault and trench lines loaded successfully.');
+  } catch (error) {
+    console.error('Error loading fault lines:', error);
+    showCustomAlert('Failed to load Philippine fault lines. Check file paths or hosting.');
+  }
 }
 
 // Call this function on page load or map ready (automatic, no toggle)
 loadFaultLines();
-
 
 function showCustomAlert(message) {
     // remove existing alert if open
@@ -1673,4 +1671,3 @@ setInterval(() => {
         window.location.reload();
     }
 }, 60000);
-
