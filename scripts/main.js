@@ -49,7 +49,7 @@ function isInPhilippines(feature) {
 async function loadFaultLines() {
     try {
         // Load gem_active_faults.geojson (faults)
-        const response1 = await fetch('./MultipleFiles/gem_active_faults.geojson');
+        const response1 = await fetch('./scripts/gem_active_faults.geojson');
         const data1 = await response1.json();
         faultLinesLayer = L.geoJSON(data1, {
             filter: isInPhilippines,  // Only include Philippine faults
@@ -61,7 +61,7 @@ async function loadFaultLines() {
         }).addTo(map);
 
         // Load gem_active_faults_harmonized.geojson (trenches/harmonized faults)
-        const response2 = await fetch('./MultipleFiles/gem_active_faults_harmonized.geojson');
+        const response2 = await fetch('./scripts/gem_active_faults_harmonized.geojson');
         const data2 = await response2.json();
         harmonizedFaultLinesLayer = L.geoJSON(data2, {
             filter: isInPhilippines,  // Only include Philippine trenches/faults
@@ -1673,3 +1673,4 @@ setInterval(() => {
         window.location.reload();
     }
 }, 60000);
+
