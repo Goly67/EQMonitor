@@ -48,35 +48,35 @@ function isInPhilippines(feature) {
 }
 
 async function loadFaultLines() {
-  try {
-    const response1 = await fetch('https://eq-monitor.vercel.app/scripts/gem_active_faults.geojson');
-    const data1 = await response1.json();
-    faultLinesLayer = L.geoJSON(data1, {
-      filter: isInPhilippines,
-      style: {
-        color: 'red',
-        weight: 1.5,
-        opacity: 0.5
-      }
-    }).addTo(map);
+    try {
+        const response1 = await fetch('https://eq-monitor.vercel.app/scripts/gem_active_faults.geojson');
+        const data1 = await response1.json();
+        faultLinesLayer = L.geoJSON(data1, {
+            filter: isInPhilippines,
+            style: {
+                color: 'red',
+                weight: 1.5,
+                opacity: 0.5
+            }
+        }).addTo(map);
 
-    const response2 = await fetch('https://eq-monitor.vercel.app/scripts/gem_active_faults_harmonized.geojson');
-    const data2 = await response2.json();
-    harmonizedFaultLinesLayer = L.geoJSON(data2, {
-      filter: isInPhilippines,
-      style: {
-        color: 'blue',
-        weight: 1,
-        opacity: 0.4,
-        dashArray: '5, 5'
-      }
-    }).addTo(map);
+        const response2 = await fetch('https://eq-monitor.vercel.app/scripts/gem_active_faults_harmonized.geojson');
+        const data2 = await response2.json();
+        harmonizedFaultLinesLayer = L.geoJSON(data2, {
+            filter: isInPhilippines,
+            style: {
+                color: 'blue',
+                weight: 1,
+                opacity: 0.4,
+                dashArray: '5, 5'
+            }
+        }).addTo(map);
 
-    console.log('Philippine fault and trench lines loaded successfully.');
-  } catch (error) {
-    console.error('Error loading fault lines:', error);
-    showCustomAlert('Failed to load Philippine fault lines. Check file paths or hosting.');
-  }
+        console.log('Philippine fault and trench lines loaded successfully.');
+    } catch (error) {
+        console.error('Error loading fault lines:', error);
+        showCustomAlert('Failed to load Philippine fault lines. Check file paths or hosting.');
+    }
 }
 
 // Call this function on page load or map ready (automatic, no toggle)
@@ -1154,8 +1154,6 @@ async function fetchNewEventsWithoutSound() {
     }
 }
 
-const eventSource = new EventSource("https://earthquakeapi.vercel.app/api/earthquakes");
-
 /************************************************************************
 * DEDUPLICATION FIX + ANIMATION CONTROL
 ************************************************************************/
@@ -1332,33 +1330,6 @@ function handleMagnitudeLabelsResponsive() {
 // Run once on load and every resize
 handleMagnitudeLabelsResponsive();
 window.addEventListener("resize", handleMagnitudeLabelsResponsive);
-
-/************************************************************************
- * SSE EVENT HANDLER FIX
- ************************************************************************/
-
-let seenQuakes = new Set();
-
-eventSource.onmessage = (event) => {
-    try {
-        const quake = JSON.parse(event.data);
-        if (!quake || !quake.id) return;
-
-        // ✅ Skip duplicate quakes
-        if (seenQuakes.has(quake.id)) return;
-        seenQuakes.add(quake.id);
-
-        latestEarthquakeId = quake.id;
-        console.log("🚨 New unique earthquake detected via SSE:", quake);
-
-        // ✅ add new marker & animate once
-        addOrUpdateEventMarker(normalizeEvent(quake), true, true);
-
-        markUpdate();
-    } catch (err) {
-        console.warn("Error parsing SSE quake:", err);
-    }
-};
 
 /************************************************************************
  * Modern bottom-bar style “Enable My Location” for mobile browsers
@@ -1629,25 +1600,13 @@ window.addEventListener("resize", () => {
  ************************************************************************/
 (function init() {
     currentRange = getDateRange("today");
-
     limitMarkers();
-
-    // Initialize Location Button FIRST (user must tap to trigger geolocation)
     initLocationButton();
-
-    // Then continue with app setup
     fetchNewEvents(); // initial load
 
-    // Start SSE (primary live updates)
-    startEventStream();
-
-    // Start polling ONLY as fallback
-    setTimeout(() => {
-        if (!sseConnected) {
-            console.warn("SSE not connected — using fallback polling");
-            startPolling();
-        }
-    }, 5000);
+    // No SSE — just use regular polling
+console.log("[EarthquakeMonitor] Using polling for updates");
+startPolling();
 
 })();
 
