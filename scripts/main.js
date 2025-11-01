@@ -963,7 +963,7 @@ document.getElementById("btnTestAlarm").addEventListener("click", () => {
         magnitude: 4.5,
         depth: 10 + Math.random() * 50,
         time: new Date().toISOString(),
-        location: "Test Alarm Location (5.0+ Magnitude)"
+        location: "Test Alarm Location (4.5+ Magnitude)"
     };
 
     console.log("🚨 Testing 4.5+ magnitude alarm...");
@@ -1091,7 +1091,7 @@ const eventSource = new EventSource("https://earthquakeapi.vercel.app/api/earthq
 function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
     if (!ev || !ev.lat || !ev.lon) return;
 
-    // ✅ Ignore duplicates
+    // Ignore duplicates
     if (markers.has(ev.id)) return;
 
     // If a previous latest exists and a new latest is incoming, revert previous latest to a circle
@@ -1272,14 +1272,14 @@ eventSource.onmessage = (event) => {
         const quake = JSON.parse(event.data);
         if (!quake || !quake.id) return;
 
-        // ✅ Skip duplicate quakes
+        // Skip duplicate quakes
         if (seenQuakes.has(quake.id)) return;
         seenQuakes.add(quake.id);
 
         latestEarthquakeId = quake.id;
         console.log("🚨 New unique earthquake detected via SSE:", quake);
 
-        // ✅ add new marker & animate once
+        // add new marker & animate once
         addOrUpdateEventMarker(normalizeEvent(quake), true, true);
 
         markUpdate();
@@ -1599,3 +1599,4 @@ setInterval(() => {
         window.location.reload();
     }
 }, 60000);
+
