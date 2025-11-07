@@ -3,7 +3,7 @@
 // Maintenance Time Config
 // ===============================
 const NEW_START = "2025-11-07T12:15:00";
-const NEW_END = "2025-11-08T07:30:00";
+const NEW_END = "2025-11-07T19:30:00";
 
 // ===============================
 // Local Storage Helpers
@@ -118,5 +118,6 @@ function updateTimeDisplays() {
 
 updateCountdown();
 setInterval(updateCountdown, 1000);
+
 
 
