@@ -776,7 +776,7 @@ async function registerServiceWorker() {
 
     try {
         console.log('[Service Worker] Attempting to register service worker...');
-        const registration = await navigator.serviceWorker.register('/sw.js', {
+        const registration = await navigator.serviceWorker.register('/EQMonitor/sw.js', {
             scope: '/'
         });
         
@@ -2086,3 +2086,4 @@ setInterval(() => {
     }
 
 }, 60000);
+
