@@ -1062,11 +1062,8 @@ function getDateRange(filter) {
 }
 
 /************************************************************************
- * FETCH EVENTS (with cache + Facebook RSS fallback)
+ * FETCH EVENTS (with cache + Facebook RSS fallback + ForestParty API)
  ************************************************************************/
-currentSource = "forestparty";
-url = "https://earthquakeapi.forestparty223.workers.dev/api/earthquakes";
-
 async function fetchNewEvents() {
     setStatus("Fetching events...");
     const cacheKey = "cachedEarthquakes";
@@ -1089,13 +1086,16 @@ async function fetchNewEvents() {
             url = CONFIG.EMSC_ENDPOINT;
         } else if (currentSource === "forestparty") {
             url = "https://earthquakeapi.forestparty223.workers.dev/api/earthquakes";
+        } else {
+            throw new Error("Unknown source selected");
         }
 
-        // ✅ Try to fetch from PHIVOLCS / other sources
+        // ✅ Fetch from the selected source
         const resp = await fetch(url + `?t=${Date.now()}`, { cache: "no-store" });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const json = await resp.json();
 
+        // Normalize events based on source
         let events = [];
         if (currentSource === "phivolcs") {
             events = json.map(normalizeEvent).filter(e => e.lat && e.lon);
@@ -1136,13 +1136,13 @@ async function fetchNewEvents() {
 
         if (!events.length) throw new Error("No events received");
 
-        // ✅ Always newest first
+        // ✅ Sort newest first
         events.sort((a, b) => new Date(b.time) - new Date(a.time));
 
-        // 🧭 latest quake
+        // 🧭 Latest quake
         const latest = events[0];
 
-        // Add all quakes, but only animate/sound the newest
+        // Add markers for all quakes, animate/sound only newest
         events.forEach(ev => addOrUpdateEventMarker(ev, ev.id === latest.id, ev.id === latest.id));
 
         // ✅ Cache successful result
@@ -1153,128 +1153,59 @@ async function fetchNewEvents() {
         setStatus(`Fetched ${events.length} events — latest: ${latest.location} (M${latest.magnitude})`);
 
     } catch (e) {
-        console.warn("⚠️ PHIVOLCS fetch failed:", e.message);
+        console.warn("⚠️ Fetch failed:", e.message);
         setStatus("Website down — switching to Facebook fallback...");
 
-        // 🧠 Try PHIVOLCS Facebook RSS fallback
+        // Fallback: PHIVOLCS Facebook RSS
         try {
-            console.warn("[EarthquakeMonitor] Website down — switching to Facebook fallback...");
-
-            // ⚠️ Show red warning banner BELOW the header bar (responsive)
-            let banner = document.querySelector("#fallbackBanner");
-            if (!banner) {
-                const header = document.querySelector(".header-bar");
-                const headerHeight = header ? header.offsetHeight : 60;
-
-                banner = document.createElement("div");
-                banner.id = "fallbackBanner";
-                banner.textContent = "PHIVOLCS WEBSITE IS DOWN";
-
-                Object.assign(banner.style, {
-                    position: "fixed",
-                    top: `${headerHeight + 10}px`, // slightly more space below header
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    background: "#c62828",
-                    color: "#fff",
-                    fontWeight: "600",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    textAlign: "center",
-                    padding: "10px 8px", // more horizontal + vertical padding
-                    zIndex: "3000",
-                    boxShadow: "0 3px 8px rgba(0,0,0,0.3)",
-                    fontSize: "clamp(13px, 2.2vw, 17px)", // a lil more readable
-                    lineHeight: "1.5", // improved text spacing
-                    wordBreak: "break-word",
-                    boxSizing: "border-box",
-                    borderRadius: "10px", // smoother corners
-                    maxWidth: "90vw",
-                    whiteSpace: "normal",
-                    textWrap: "balance", // makes wrapping more natural (modern browsers)
-                });
-
-                document.body.appendChild(banner);
-
-                // Adjust banner position on resize/orientation change
-                window.addEventListener("resize", () => {
-                    const newHeaderHeight = header ? header.offsetHeight : 60;
-                    banner.style.top = `${newHeaderHeight + 8}px`;
-                });
-            }
-
-
-            addNotification("PHIVOLCS DATA FALLBACK", "Using Facebook feed data (website may be down)", true);
-
-            const rssRes = await fetch("https://rss.app/feeds/U6XZP9zYYmVM8EiP.xml");
+            const rssRes = await fetch(fbFeedUrl);
             const rssText = await rssRes.text();
-
             const parser = new DOMParser();
             const xml = parser.parseFromString(rssText, "text/xml");
             const items = [...xml.querySelectorAll("item")];
             if (!items.length) throw new Error("No Facebook RSS items found");
 
-            const fallbackEvents = [];
-
-            items.forEach((item, index) => {
+            const fallbackEvents = items.map((item, index) => {
                 const raw = item.querySelector("description")?.textContent || "";
                 const cleanText = raw
-                    .replace(/<[^>]+>/g, "")           // remove HTML
-                    .replace(/#\S+/g, "")              // remove hashtags
-                    .replace(/https?:\/\/\S+/g, "")    // remove link
-                    .replace(/\s+/g, " ")              // normalize spaces
+                    .replace(/<[^>]+>/g, "")
+                    .replace(/#\S+/g, "")
+                    .replace(/https?:\/\/\S+/g, "")
+                    .replace(/\s+/g, " ")
                     .trim();
 
-                // Extract fields
                 const magnitude = parseFloat(cleanText.match(/Magnitude\s*=?\s*([\d.]+)/i)?.[1] || 0);
                 const depth = parseFloat(cleanText.match(/Depth\s*=?\s*(\d+)/i)?.[1] || 0);
                 const lat = parseFloat(cleanText.match(/Location\s*=\s*([0-9.]+)°\s*[NS]/i)?.[1] || 0);
                 const lon = parseFloat(cleanText.match(/,\s*([0-9.]+)°\s*[EW]/i)?.[1] || 0);
-
                 const dateMatch = cleanText.match(/Date and Time:\s*(.+?)(?=Magnitude|$)/i);
                 const time = dateMatch ? dateMatch[1].trim() : "Unknown time";
-
-                // Extract human-readable place
                 const locMatch = cleanText.match(/E of (.+?)\)/i);
                 const location = locMatch ? locMatch[1].trim() : "Philippines";
 
-                if (lat && lon) {
-                    fallbackEvents.push({
-                        id: `fb_${index}`,
-                        lat,
-                        lon,
-                        magnitude,
-                        depth,
-                        time,
-                        location,
-                        link: null // no clickable link in popup
-                    });
-                }
-            });
+                if (lat && lon) return { id: `fb_${index}`, lat, lon, magnitude, depth, time, location, link: null };
+                return null;
+            }).filter(Boolean);
 
-            if (!fallbackEvents.length) throw new Error("No valid earthquake entries found in Facebook feed");
+            if (!fallbackEvents.length) throw new Error("No valid Facebook entries");
 
-            // Sort newest first
             fallbackEvents.sort((a, b) => new Date(b.time) - new Date(a.time));
             const latest = fallbackEvents[0];
 
-            // Add markers (triangles/circles + animation)
             fallbackEvents.forEach(ev => addOrUpdateEventMarker(ev, ev.id === latest.id, ev.id === latest.id));
 
             latestEarthquakeId = latest.id;
             setStatus(`Fallback: Showing ${fallbackEvents.length} events from Facebook feed`);
 
-            // Cache fallback data
-            localStorage.setItem("cachedEarthquakes", JSON.stringify(fallbackEvents));
-            localStorage.setItem("cachedEarthquakesTime", Date.now().toString());
+            localStorage.setItem(cacheKey, JSON.stringify(fallbackEvents));
+            localStorage.setItem(cacheTimeKey, Date.now().toString());
 
         } catch (fbErr) {
             console.error("❌ Facebook fallback also failed:", fbErr);
             setStatus("All sources unavailable");
 
-            const cached = localStorage.getItem("cachedEarthquakes");
-            const cachedTime = localStorage.getItem("cachedEarthquakesTime");
+            const cached = localStorage.getItem(cacheKey);
+            const cachedTime = localStorage.getItem(cacheTimeKey);
             if (cached) {
                 const events = JSON.parse(cached);
                 const ageMins = Math.floor((Date.now() - cachedTime) / 60000);
@@ -1284,9 +1215,9 @@ async function fetchNewEvents() {
                 setStatus("No cached earthquakes available 😕");
             }
         }
-
     }
 }
+
 
 function limitMarkers() {
     const limit = 250; // Adjust as needed
