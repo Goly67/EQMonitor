@@ -58,7 +58,7 @@ function isInPhilippines(feature) {
 
 async function loadFaultLines() {
     try {
-        const response1 = await fetch('https://eq-monitor.vercel.app/scripts/gem_active_faults.geojson');
+        const response1 = await fetch('https://raw.githubusercontent.com/Goly67/EQMonitor/main/scripts/gem_active_faults.geojson');
         const data1 = await response1.json();
         faultLinesLayer = L.geoJSON(data1, {
             filter: isInPhilippines,
@@ -69,7 +69,7 @@ async function loadFaultLines() {
             }
         }).addTo(map);
 
-        const response2 = await fetch('https://eq-monitor.vercel.app/scripts/gem_active_faults_harmonized.geojson');
+        const response2 = await fetch('https://raw.githubusercontent.com/Goly67/EQMonitor/main/scripts/gem_active_faults_harmonized.geojson');
         const data2 = await response2.json();
         harmonizedFaultLinesLayer = L.geoJSON(data2, {
             filter: isInPhilippines,
@@ -282,7 +282,7 @@ function playQuakeSound(isNearby = false, magnitude = 0) {
  * CONFIG
  ************************************************************************/
 const CONFIG = {
-    API_ENDPOINT: "https://earthquakeapi.vercel.app/api/earthquakes",
+    API_ENDPOINT: "https://earthquakeapi.forestparty223.workers.dev/api/earthquakes",
     DEFAULT_POLL_MS: 15000,
 };
 let currentSource = "phivolcs";
@@ -2084,4 +2084,5 @@ setInterval(() => {
         console.warn("⚠️ No new earthquake updates for 5 minutes. Reloading page...");
         window.location.reload();
     }
+
 }, 60000);
