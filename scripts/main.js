@@ -839,28 +839,25 @@ async function sendBrowserNotification(ev, title, message, isAlert) {
     console.log('[Notification] Message:', message);
     console.log('[Notification] Is Alert:', isAlert);
 
-    // Shorten location text - remove long directional info and keep main location
     function shortenLocation(location) {
         if (!location) return 'Unknown Location';
         
-        // Remove patterns like "km N 46° E of" or similar directional info
+        // Remove the directional part like "036 km N 35° E of"
         let shortLoc = location
-            .replace(/\d+\s*km\s*[NS]\s*\d+°\s*[EW]\s*of\s*/gi, '') // Remove "009 km N 46° E of"
-            .replace(/^\d+\s*km\s*/gi, '') // Remove leading "009 km"
+            .replace(/\d+\s*km\s*[NS]\s*\d+°\s*[EW]\s*of\s*/gi, '')
+            .replace(/^\d+\s*km\s*/gi, '')
             .trim();
-        
-        // If location is still long, try to extract just the main place name
-        // Usually format is "Place Name (Province)" or just "Place Name"
-        const match = shortLoc.match(/(.+?)(?:\s*\([^)]+\))?$/);
+    
+        const match = shortLoc.match(/^([A-Za-zÀ-ÿ\s'’\-.]+(?:\s*\([^)]+\))?)/);
         if (match) {
             shortLoc = match[1].trim();
         }
-        
-        // Limit length to 40 characters
-        if (shortLoc.length > 40) {
-            shortLoc = shortLoc.substring(0, 37) + '...';
+    
+        // Safety check: prevent overlong text
+        if (shortLoc.length > 60) {
+            shortLoc = shortLoc.substring(0, 57) + '...';
         }
-        
+    
         return shortLoc;
     }
     
@@ -926,11 +923,7 @@ async function sendBrowserNotification(ev, title, message, isAlert) {
             notification.onshow = () => {
                 console.log('[Notification] ✅✅✅ Desktop notification DISPLAYED successfully!');
             };
-            
-            // Log when notification is closed
-            notification.onclose = () => {
-                console.log('[Notification] Desktop notification closed');
-            };
+        
             
             // Store notification reference to prevent garbage collection
             window._lastNotification = notification;
