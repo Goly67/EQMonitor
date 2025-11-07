@@ -1122,16 +1122,36 @@ async function fetchNewEvents() {
                 link: e.link
             })).filter(e => e.lat && e.lon);
         } else if (currentSource === "forestparty") {
-            events = json.map(e => ({
-                id: e.details_link || Math.random().toString(36).substr(2, 9),
-                lat: e.latitude,
-                lon: e.longitude,
-                magnitude: e.magnitude,
-                depth: e.depth_km,
-                time: new Date(e.date_time).toISOString(),
-                location: e.location.replace(/\n|\t/g, ' ').trim(),
-                link: e.details_link
-            })).filter(e => e.lat && e.lon);
+            events = json.map(e => {
+                let time = "Unknown";
+                try {
+                    const [datePart, timePart] = e.date_time.split(" - ");
+                    if (datePart && timePart) {
+                        time = new Date(`${datePart} ${timePart}`).toISOString();
+                    } else {
+                        time = new Date(e.date_time).toISOString(); // fallback
+                    }
+                } catch {
+                    time = new Date().toISOString(); // ultimate fallback
+                }
+
+                // Clean location
+                const location = (e.location || "Philippines").replace(/\n|\t/g, " ").trim();
+
+                // Generate a unique ID if details_link is missing
+                const id = e.details_link || Math.random().toString(36).substr(2, 9);
+
+                return {
+                    id,
+                    lat: e.latitude,
+                    lon: e.longitude,
+                    magnitude: e.magnitude,
+                    depth: e.depth_km,
+                    time,
+                    location,
+                    link: e.details_link
+                };
+            }).filter(ev => ev.lat && ev.lon && ev.time !== "Invalid Date");
         }
 
         if (!events.length) throw new Error("No events received");
