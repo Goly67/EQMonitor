@@ -717,6 +717,12 @@ input[type=range]::-moz-range-thumb {
         height: 2px;
     }
 
+    .control-panel {
+        width: calc(100% - 24px);
+        max-width: 400px;
+        padding: 16px;
+    }
+
     .control-panel h6 {
         font-size: 10px;
         margin-bottom: 10px;
@@ -759,19 +765,24 @@ input[type=range]::-moz-range-thumb {
 
      .control-panel {
         position: fixed;
-        left: 2.5%;
-        top: 14%;
-        transform: translate(-0%, 50%);
-        width: calc(100% - 20px); /* ✅ 10px gap on both sides */
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: calc(100% - 20px);
         max-width: calc(100% - 20px);
-        max-height: 80vh;
-        padding: 19px;
+        max-height: 85vh;
+        padding: 16px;
         font-size: 11px;
         border-radius: 12px;
         border: 1px solid rgba(205, 211, 212, 0.15);
         box-sizing: border-box;
         opacity: 0;
         pointer-events: none;
+    }
+    
+    .control-panel.active {
+        opacity: 1;
+        pointer-events: auto;
     }
 
     .header-title {
@@ -839,9 +850,9 @@ input[type=range]::-moz-range-thumb {
     .control-panel input[type=range],
     .control-panel input[type=date] {
         font-size: 10px;
-        padding: 10px;
-        min-height: 40px;
-        margin: 4px 0;
+        padding: 12px;
+        min-height: 44px;
+        margin: 6px 0;
     }
 
     .status {

@@ -6,6 +6,15 @@ let lastEventLink = null;
 let latestEarthquakeId = null;
 let flying = false;
 const CACHE_TTL = 60000;
+let notificationPermission = null;
+let serviceWorkerRegistration = null;
+let lastNotifiedEarthquakeId = null;
+let lastUpdateTime = Date.now();
+
+// Function to mark when data was last updated
+function markUpdate() {
+    lastUpdateTime = Date.now();
+}
 
 const panel = document.getElementById('controls');
 const burgerMenuBtn = document.getElementById('burgerMenuBtn');
@@ -695,6 +704,21 @@ function showNotification(ev, marker) {
         const message = `${ev.location} (${ev.depth} km depth)`;
 
         addNotification(title, message, isAlert, formatDateTime(ev.time));
+        
+        // Send desktop push notification if this is a new earthquake
+        // Check both currentNotificationId and lastNotifiedEarthquakeId to avoid duplicates
+        if (quakeId !== lastNotifiedEarthquakeId) {
+            lastNotifiedEarthquakeId = quakeId;
+            console.log('[Notification] ========================================');
+            console.log('[Notification] NEW EARTHQUAKE DETECTED - Sending desktop push notification');
+            console.log('[Notification] Earthquake ID:', quakeId);
+            console.log('[Notification] Previous notified ID:', lastNotifiedEarthquakeId);
+            console.log('[Notification] ========================================');
+            sendBrowserNotification(ev, title, message, isAlert);
+        } else {
+            console.log('[Notification] ⚠️ Skipping duplicate notification for earthquake:', quakeId);
+            console.log('[Notification] Last notified ID:', lastNotifiedEarthquakeId);
+        }
     }
 
     // Determine if nearby
@@ -704,6 +728,249 @@ function showNotification(ev, marker) {
         if (dist <= 100) isNearby = true;
     }
     setTimeout(() => playQuakeSound(isNearby, ev.magnitude), 100);
+}
+
+/************************************************************************
+ * BROWSER PUSH NOTIFICATIONS
+ ************************************************************************/
+async function requestNotificationPermission() {
+    if (!('Notification' in window)) {
+        console.warn('This browser does not support notifications');
+        return false;
+    }
+
+    if (Notification.permission === 'granted') {
+        notificationPermission = 'granted';
+        return true;
+    }
+
+    if (Notification.permission === 'denied') {
+        console.warn('Notification permission denied');
+        notificationPermission = 'denied';
+        return false;
+    }
+
+    // Request permission
+    try {
+        const permission = await Notification.requestPermission();
+        notificationPermission = permission;
+        
+        if (permission === 'granted') {
+            console.log('Notification permission granted');
+            return true;
+        } else {
+            console.log('Notification permission denied');
+            return false;
+        }
+    } catch (error) {
+        console.error('Error requesting notification permission:', error);
+        return false;
+    }
+}
+
+async function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) {
+        console.warn('[Service Worker] Service Workers are not supported in this browser');
+        return null;
+    }
+
+    try {
+        console.log('[Service Worker] Attempting to register service worker...');
+        const registration = await navigator.serviceWorker.register('/sw.js', {
+            scope: '/'
+        });
+        
+        console.log('[Service Worker] Registered successfully:', registration);
+        serviceWorkerRegistration = registration;
+        
+        // Wait for service worker to be ready
+        if (registration.installing) {
+            console.log('[Service Worker] Service worker is installing...');
+            await new Promise((resolve) => {
+                registration.installing.addEventListener('statechange', function() {
+                    console.log('[Service Worker] State changed to:', this.state);
+                    if (this.state === 'activated' || this.state === 'installed') {
+                        resolve();
+                    }
+                });
+            });
+        } else if (registration.waiting) {
+            console.log('[Service Worker] Service worker is waiting...');
+        } else if (registration.active) {
+            console.log('[Service Worker] Service worker is already active');
+        }
+        
+        // Check for updates
+        registration.addEventListener('updatefound', () => {
+            console.log('[Service Worker] Update found');
+            const newWorker = registration.installing;
+            newWorker.addEventListener('statechange', () => {
+                console.log('[Service Worker] New worker state:', newWorker.state);
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('[Service Worker] New service worker available');
+                }
+            });
+        });
+        
+        return registration;
+    } catch (error) {
+        console.error('[Service Worker] Registration failed:', error);
+        console.error('[Service Worker] Error details:', error.message, error.stack);
+        return null;
+    }
+}
+
+async function sendBrowserNotification(ev, title, message, isAlert) {
+    // Always check the actual permission status, not the cached variable
+    const currentPermission = Notification.permission;
+    
+    if (currentPermission !== 'granted') {
+        console.warn('[Notification] Permission not granted. Current status:', currentPermission);
+        console.warn('[Notification] Please click "Enable Push Notifications" button to grant permission');
+        return;
+    }
+    
+    // Update permission state to match actual permission
+    notificationPermission = 'granted';
+    
+    console.log('[Notification] ===== SENDING DESKTOP PUSH NOTIFICATION =====');
+    console.log('[Notification] Earthquake ID:', ev.id);
+    console.log('[Notification] Title:', title);
+    console.log('[Notification] Message:', message);
+    console.log('[Notification] Is Alert:', isAlert);
+
+    // Determine distance for context
+    let distanceText = '';
+    if (userLocation) {
+        const dist = getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon);
+        distanceText = dist <= 100 
+            ? `⚠️ NEARBY - ${Math.round(dist)} km away` 
+            : `${Math.round(dist)} km away`;
+    }
+
+    const notificationBody = `${message}${distanceText ? '\n' + distanceText : ''}\nTime: ${formatDateTime(ev.time)}`;
+    
+    // Use absolute path for icon or relative to root
+    const iconPath = window.location.origin + '/logo.png';
+    
+    const notificationOptions = {
+        body: notificationBody,
+        icon: iconPath,
+        badge: iconPath,
+        tag: `earthquake-${ev.id}`,
+        requireInteraction: isAlert, // Keep high-magnitude alerts visible until user interacts
+        timestamp: ev.time ? new Date(ev.time).getTime() : Date.now(),
+        vibrate: isAlert ? [200, 100, 200, 100, 200] : [200, 100, 200],
+        data: {
+            url: window.location.href,
+            earthquakeId: ev.id,
+            magnitude: ev.magnitude,
+            location: ev.location
+        }
+    };
+
+    try {
+        // Always use direct Notification API for desktop notifications
+        if (Notification.permission === 'granted') {
+            console.log('[Notification] Creating desktop notification using Notification API');
+            console.log('[Notification] Options:', notificationOptions);
+            
+            // Create desktop notification - this will show as a system notification
+            const notification = new Notification(title, notificationOptions);
+            
+            console.log('[Notification] ✅ Desktop notification object created:', notification);
+            
+            // Handle click - focus window when notification is clicked
+            notification.onclick = (event) => {
+                console.log('[Notification] Notification clicked');
+                event.preventDefault();
+                window.focus();
+                notification.close();
+            };
+            
+            // Handle errors
+            notification.onerror = (error) => {
+                console.error('[Notification] ❌ Desktop notification error:', error);
+                console.error('[Notification] Error type:', typeof error);
+            };
+            
+            // Log when notification is shown
+            notification.onshow = () => {
+                console.log('[Notification] ✅✅✅ Desktop notification DISPLAYED successfully!');
+            };
+            
+            // Log when notification is closed
+            notification.onclose = () => {
+                console.log('[Notification] Desktop notification closed');
+            };
+            
+            // Store notification reference to prevent garbage collection
+            window._lastNotification = notification;
+            
+            // Auto-close after 10 seconds if not high priority
+            if (!isAlert) {
+                setTimeout(() => {
+                    if (notification) {
+                        notification.close();
+                    }
+                }, 10000);
+            }
+            
+            // Double-check: verify notification was created
+            if (!notification) {
+                console.error('[Notification] ❌ Notification object is null/undefined!');
+            }
+        } else {
+            console.warn('[Notification] ❌ Cannot show desktop notification - permission not granted');
+            console.warn('[Notification] Current permission:', Notification.permission);
+        }
+    } catch (error) {
+        console.error('[Notification] ❌❌❌ ERROR creating desktop notification:', error);
+        console.error('[Notification] Error name:', error.name);
+        console.error('[Notification] Error message:', error.message);
+        console.error('[Notification] Error stack:', error.stack);
+        
+        // If direct API fails, try service worker as fallback
+        if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+            try {
+                console.log('[Notification] Attempting fallback to service worker');
+                await serviceWorkerRegistration.showNotification(title, notificationOptions);
+                console.log('[Notification] Service worker notification sent');
+            } catch (swError) {
+                console.error('[Notification] Service worker fallback also failed:', swError);
+            }
+        }
+    }
+}
+
+// Initialize notification system on page load
+async function initNotificationSystem() {
+    // Register service worker first
+    await registerServiceWorker();
+    
+    // Always sync permission state with actual browser permission
+    notificationPermission = Notification.permission;
+    
+    // Check if notifications are already enabled
+    if (Notification.permission === 'granted') {
+        const btn = document.getElementById('btnEnableNotifications');
+        if (btn) {
+            btn.textContent = '✓ Notifications Enabled';
+            btn.style.background = '#28a745';
+            btn.disabled = true;
+        }
+        console.log('[Notification] Notifications already enabled on page load');
+    } else {
+        console.log('[Notification] Notifications not enabled. Current permission:', Notification.permission);
+    }
+    
+    // Request notification permission after a short delay (better UX) - only if not already granted
+    if (Notification.permission === 'default') {
+        setTimeout(async () => {
+            // Don't auto-request, let user click the button
+            // This is better UX - users should explicitly enable notifications
+        }, 2000);
+    }
 }
 
 let audioCtx = null;
@@ -1022,23 +1289,105 @@ document.getElementById("btnUnlockAudio").addEventListener("click", () => {
     }
 });
 
+// NOTIFICATION ENABLE BUTTON
+document.getElementById("btnEnableNotifications").addEventListener("click", async () => {
+    const btn = document.getElementById("btnEnableNotifications");
+    btn.disabled = true;
+    btn.textContent = "Requesting permission...";
+    
+    // Make sure service worker is registered first
+    if (!serviceWorkerRegistration) {
+        console.log('[Notification] Registering service worker before requesting permission...');
+        await registerServiceWorker();
+    }
+    
+    const granted = await requestNotificationPermission();
+    
+    // Always sync permission state with actual browser permission
+    notificationPermission = Notification.permission;
+    
+    if (granted && Notification.permission === 'granted') {
+        btn.textContent = "✓ Notifications Enabled";
+        btn.style.background = "#28a745";
+        addNotification('Push Notifications Enabled', 'You will receive desktop push notifications for new earthquakes', false);
+        console.log('[Notification] Permission granted and synced. Status:', Notification.permission);
+    } else {
+        btn.textContent = "Enable Push Notifications";
+        btn.disabled = false;
+        if (Notification.permission === 'denied') {
+            showCustomAlert('Notification permission was denied. Please enable it in your browser settings:\n\nChrome: Settings > Site Settings > Notifications\n\nOr click the lock icon in the address bar and allow notifications.');
+        } else {
+            showCustomAlert('Notification permission was not granted. Please try again.');
+        }
+    }
+});
+
 document.getElementById("btnTestAlarm").addEventListener("click", () => {
     if (!audioUnlocked) {
         showCustomAlert("Please unlock audio first by clicking 'Unlock Audio' button");
         return;
     }
 
+    // Create test earthquake close to user location (within 100km to trigger alarm)
+    // This will trigger the alarm sound when nearby (within 100km) and magnitude >= 4.0
+    let testLat, testLon;
+    
+    if (userLocation) {
+        // Place earthquake approximately 50km away (within the 100km "nearby" threshold)
+        // 50km ≈ 0.45 degrees
+        const distanceKm = 50;
+        const bearing = 0; // North direction (0 degrees)
+        const earthRadiusKm = 6371;
+        const angularDistance = distanceKm / earthRadiusKm;
+        
+        const lat1 = userLocation.lat * Math.PI / 180;
+        const lon1 = userLocation.lon * Math.PI / 180;
+        const bearingRad = bearing * Math.PI / 180;
+        
+        testLat = Math.asin(
+            Math.sin(lat1) * Math.cos(angularDistance) +
+            Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearingRad)
+        ) * 180 / Math.PI;
+        
+        testLon = (lon1 + Math.atan2(
+            Math.sin(bearingRad) * Math.sin(angularDistance) * Math.cos(lat1),
+            Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(testLat * Math.PI / 180)
+        )) * 180 / Math.PI;
+        
+        console.log("🚨 Test earthquake placed ~50km away from user location (within alarm range)");
+        console.log("🚨 User location:", userLocation.lat, userLocation.lon);
+        console.log("🚨 Test earthquake location:", testLat, testLon);
+        
+        // Verify distance
+        const calculatedDistance = getDistanceKm(userLocation.lat, userLocation.lon, testLat, testLon);
+        console.log("🚨 Calculated distance:", Math.round(calculatedDistance), "km (within 100km = nearby)");
+    } else {
+        // If no user location, place it at default location
+        // User should enable location to test alarm properly
+        testLat = 12.8797;
+        testLon = 121.7740;
+        console.log("🚨 User location not available - please enable location to test alarm sound");
+        showCustomAlert("Please enable your location to test the alarm sound. The alarm only plays for earthquakes within 100km of your location.");
+    }
+    
     const testEv = {
         id: "TEST_ALARM_" + Date.now(),
-        lat: userLocation ? userLocation.lat + (Math.random() - 0.5) * 0.5 : 12.8797,
-        lon: userLocation ? userLocation.lon + (Math.random() - 0.5) * 0.5 : 121.7740,
-        magnitude: 4.5,
+        lat: testLat,
+        lon: testLon,
+        magnitude: 5.5, // 5.0+ magnitude to trigger alarm
         depth: 10 + Math.random() * 50,
         time: new Date().toISOString(),
-        location: "Test Alarm Location (5.0+ Magnitude)"
+        location: "Test Alarm Location (5.0+ Magnitude) - Nearby"
     };
 
-    console.log("🚨 Testing 4.5+ magnitude alarm...");
+    console.log("🚨 Testing 5.0+ magnitude alarm (will play alarm if within 100km of your location)...");
+    
+    // Reset notification tracking so test notification will show
+    lastNotifiedEarthquakeId = null;
+    currentNotificationId = null;
+    
+    // Add the marker - this will trigger showNotification and playQuakeSound
+    // The alarm will only play if the earthquake is within 100km (isNearby = true) and magnitude >= 4.0
     addOrUpdateEventMarker(normalizeEvent(testEv), true, true);
 });
 
@@ -1099,7 +1448,14 @@ document.getElementById("selInterval").addEventListener("change", e => {
 function refreshMap() {
     stopPolling();
 
+    // Store the previous latest earthquake ID before clearing
+    const previousLatestId = latestEarthquakeId;
     latestEarthquakeId = null;
+    
+    // Reset notification tracking - this allows the latest earthquake to notify again
+    // if it's different from what we had before
+    lastNotifiedEarthquakeId = previousLatestId; // Keep previous to compare
+    currentNotificationId = null;
 
     markers.forEach(({ layer }) => {
         if (layer._pulse) clearInterval(layer._pulse);
@@ -1109,12 +1465,9 @@ function refreshMap() {
     if (flyTimeout) clearTimeout(flyTimeout);
     latestMarker = null;
 
-    currentNotificationId = null;
-
-    latestMarker = null;
-    currentNotificationId = null;
-
-    fetchNewEventsWithoutSound();
+    // Use regular fetchNewEvents to ensure notifications work
+    console.log('[Refresh] Refreshing earthquake data...');
+    fetchNewEvents();
     startPolling();
 }
 
@@ -1143,9 +1496,19 @@ async function fetchNewEventsWithoutSound() {
 
         events.sort((a, b) => new Date(b.time) - new Date(a.time));
 
+        // Get the latest earthquake
+        const latest = events[0];
+        
+        // Add all events, but only animate/notify the latest
         events.forEach((ev, idx) => {
-            addOrUpdateEventMarker(ev, idx === 0, false);
+            const isLatest = ev.id === latest.id;
+            addOrUpdateEventMarker(ev, isLatest, false); // false = no sound, but still notify
         });
+
+        // Update latest earthquake ID
+        if (latest) {
+            latestEarthquakeId = latest.id;
+        }
 
         setStatus(`Fetched ${events.length} events`);
     } catch (e) {
@@ -1602,6 +1965,7 @@ window.addEventListener("resize", () => {
     currentRange = getDateRange("today");
     limitMarkers();
     initLocationButton();
+    initNotificationSystem(); // Initialize push notifications
     fetchNewEvents(); // initial load
 
     // No SSE — just use regular polling
