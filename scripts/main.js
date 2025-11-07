@@ -839,6 +839,33 @@ async function sendBrowserNotification(ev, title, message, isAlert) {
     console.log('[Notification] Message:', message);
     console.log('[Notification] Is Alert:', isAlert);
 
+    // Shorten location text - remove long directional info and keep main location
+    function shortenLocation(location) {
+        if (!location) return 'Unknown Location';
+        
+        // Remove patterns like "km N 46° E of" or similar directional info
+        let shortLoc = location
+            .replace(/\d+\s*km\s*[NS]\s*\d+°\s*[EW]\s*of\s*/gi, '') // Remove "009 km N 46° E of"
+            .replace(/^\d+\s*km\s*/gi, '') // Remove leading "009 km"
+            .trim();
+        
+        // If location is still long, try to extract just the main place name
+        // Usually format is "Place Name (Province)" or just "Place Name"
+        const match = shortLoc.match(/(.+?)(?:\s*\([^)]+\))?$/);
+        if (match) {
+            shortLoc = match[1].trim();
+        }
+        
+        // Limit length to 40 characters
+        if (shortLoc.length > 40) {
+            shortLoc = shortLoc.substring(0, 37) + '...';
+        }
+        
+        return shortLoc;
+    }
+    
+    const shortLocation = shortenLocation(ev.location);
+    
     // Determine distance for context
     let distanceText = '';
     if (userLocation) {
@@ -848,7 +875,8 @@ async function sendBrowserNotification(ev, title, message, isAlert) {
             : `${Math.round(dist)} km away`;
     }
 
-    const notificationBody = `${message}${distanceText ? '\n' + distanceText : ''}\nTime: ${formatDateTime(ev.time)}`;
+    // Format: Depth below magnitude, then location, then distance, then time
+    const notificationBody = `${ev.depth ?? '?'} km depth\n${shortLocation}${distanceText ? '\n' + distanceText : ''}\nTime: ${formatDateTime(ev.time)}`;
     
     // Use absolute path for icon or relative to root
     const iconPath = window.location.origin + '/logo.png';
