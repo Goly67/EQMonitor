@@ -285,7 +285,7 @@ const CONFIG = {
     API_ENDPOINT: "https://earthquakeapi.forestparty223.workers.dev/api/earthquakes",
     DEFAULT_POLL_MS: 15000,
 };
-let currentSource = "phivolcs";
+let currentSource = "forestparty";
 
 
 let circleScale = 0.5;
@@ -1123,22 +1123,25 @@ async function fetchNewEvents() {
             })).filter(e => e.lat && e.lon);
         } else if (currentSource === "forestparty") {
             events = json.map(e => {
-                let time = "Unknown";
+                let time;
                 try {
-                    const [datePart, timePart] = e.date_time.split(" - ");
-                    if (datePart && timePart) {
-                        time = new Date(`${datePart} ${timePart}`).toISOString();
+                    const parts = e.date_time.split(" - ");
+                    if (parts.length === 2) {
+                        const [dateStr, timeStr] = parts;
+                        time = new Date(`${dateStr} ${timeStr}`).toISOString();
                     } else {
-                        time = new Date(e.date_time).toISOString(); // fallback
+                        time = new Date(e.date_time).toISOString();
                     }
                 } catch {
-                    time = new Date().toISOString(); // ultimate fallback
+                    time = new Date().toISOString();
                 }
 
-                // Clean location
-                const location = (e.location || "Philippines").replace(/\n|\t/g, " ").trim();
+                let location = (e.location || "Philippines")
+                    .replace(/^\d+\s*km\s*/i, "")
+                    .replace(/\n|\t/g, " ")
+                    .trim()
+                    .replace(/\s+/g, " ");
 
-                // Generate a unique ID if details_link is missing
                 const id = e.details_link || Math.random().toString(36).substr(2, 9);
 
                 return {
@@ -1151,7 +1154,13 @@ async function fetchNewEvents() {
                     location,
                     link: e.details_link
                 };
-            }).filter(ev => ev.lat && ev.lon && ev.time !== "Invalid Date");
+            })
+                .filter(ev => ev.lat && ev.lon && ev.time && ev.location);
+
+            // --- FILTER ONLY TODAY'S EVENTS ---
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // 12:00 AM today
+            events = events.filter(ev => new Date(ev.time) >= today);
         }
 
         if (!events.length) throw new Error("No events received");
