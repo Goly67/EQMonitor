@@ -964,14 +964,40 @@ async function sendBrowserNotification(ev, title, message, isAlert) {
     }
 }
 
+function triggerPermissionPrompt() {
+    if (Notification.permission === 'default') {
+        // Add a tiny overlay that auto-clicks itself on user interaction
+        const hiddenBtn = document.createElement('button');
+        hiddenBtn.style.position = 'absolute';
+        hiddenBtn.style.opacity = '0';
+        hiddenBtn.style.pointerEvents = 'none';
+        document.body.appendChild(hiddenBtn);
+
+        const handler = async () => {
+            try {
+                console.log('[Notification] Asking permission via trusted user gesture...');
+                await hiddenBtn.click(); // Must be inside real user click
+                const permission = await Notification.requestPermission();
+                console.log('Notification result:', permission);
+            } catch (err) {
+                console.error('Permission error:', err);
+            }
+            window.removeEventListener('click', handler);
+            hiddenBtn.remove();
+        };
+
+        // Hook into any first user click
+        window.addEventListener('click', handler, { once: true });
+    }
+}
+
 // Initialize notification system on page load
 async function initNotificationSystem() {
-    // Register service worker first
     await registerServiceWorker();
-    
-    // Always sync permission state with actual browser permission
+    triggerPermissionPrompt();
+
     notificationPermission = Notification.permission;
-    
+
     // Check if notifications are already enabled
     if (Notification.permission === 'granted') {
         const btn = document.getElementById('btnEnableNotifications');
@@ -984,15 +1010,15 @@ async function initNotificationSystem() {
     } else {
         console.log('[Notification] Notifications not enabled. Current permission:', Notification.permission);
     }
-    
-    // Request notification permission after a short delay (better UX) - only if not already granted
-    if (Notification.permission === 'default') {
-        setTimeout(async () => {
-            // Don't auto-request, let user click the button
-            // This is better UX - users should explicitly enable notifications
-        }, 2000);
+
+    if (Notification.permission !== 'granted') {
+        console.log('[Notification] Waiting for user interaction to request permission...');
+        forceNotificationPermission();
+    } else {
+        console.log('[Notification] Permission already granted.');
     }
 }
+
 
 let audioCtx = null;
 let bufferFar = null;
@@ -1278,38 +1304,6 @@ document.getElementById("dateFilter").addEventListener("change", e => {
     }
 });
 
-document.getElementById("btnApplyRange").addEventListener("click", () => {
-    const startInput = document.getElementById("startDate").value;
-    const endInput = document.getElementById("endDate").value;
-    if (startInput && endInput) {
-        currentRange = { start: new Date(startInput), end: new Date(endInput) };
-        markers.forEach(({ layer }) => map.removeLayer(layer));
-        markers.clear();
-        fetchNewEvents();
-    }
-});
-
-// AUDIO UNLOCK BUTTON
-document.getElementById("btnUnlockAudio").addEventListener("click", () => {
-    if (!audioUnlocked) {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-
-        const unlock = () => {
-            audioUnlocked = true;
-            console.log("Audio unlocked via button");
-            const btn = document.getElementById("btnUnlockAudio");
-            btn.disabled = true;
-            btn.textContent = "EARTHQUAKE AUDIO IS ON";
-        };
-
-        if (ctx.state === "suspended") {
-            ctx.resume().then(unlock).catch(console.warn);
-        } else {
-            unlock();
-        }
-    }
-});
-
 // NOTIFICATION ENABLE BUTTON
 document.getElementById("btnEnableNotifications").addEventListener("click", async () => {
     const btn = document.getElementById("btnEnableNotifications");
@@ -1342,6 +1336,80 @@ document.getElementById("btnEnableNotifications").addEventListener("click", asyn
         }
     }
 });
+
+// AUDIO UNLOCK BUTTON
+document.getElementById("btnUnlockAudio").addEventListener("click", () => {
+    if (!audioUnlocked) {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+        const unlock = () => {
+            audioUnlocked = true;
+            console.log("Audio unlocked via button");
+            const btn = document.getElementById("btnUnlockAudio");
+            btn.disabled = true;
+            btn.textContent = "EARTHQUAKE AUDIO IS ON";
+        };
+
+        if (ctx.state === "suspended") {
+            ctx.resume().then(unlock).catch(console.warn);
+        } else {
+            unlock();
+        }
+    }
+});
+
+
+document.getElementById("btnApplyRange").addEventListener("click", () => {
+    const startInput = document.getElementById("startDate").value;
+    const endInput = document.getElementById("endDate").value;
+    if (startInput && endInput) {
+        currentRange = { start: new Date(startInput), end: new Date(endInput) };
+        markers.forEach(({ layer }) => map.removeLayer(layer));
+        markers.clear();
+        fetchNewEvents();
+    }
+});
+
+let audioContext;
+
+function autoUnlockAudio() {
+    if (audioUnlocked) return;
+
+    // Create a new audio context if needed
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    const unlockAudio = async () => {
+        if (audioUnlocked) return;
+
+        try {
+            if (audioContext.state === "suspended") {
+                await audioContext.resume();
+            }
+
+            audioUnlocked = true;
+            console.log("🎧 Audio unlocked automatically after first interaction!");
+
+            // Update UI if button exists
+            const btn = document.getElementById("btnUnlockAudio");
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = "EARTHQUAKE AUDIO IS ON";
+            }
+
+            // Clean up listeners
+            window.removeEventListener("click", unlockAudio);
+            window.removeEventListener("scroll", unlockAudio);
+            window.removeEventListener("keydown", unlockAudio);
+        } catch (err) {
+            console.warn("Audio unlock failed:", err);
+        }
+    };
+
+    // Wait for first real interaction
+    window.addEventListener("click", unlockAudio, { once: true });
+    window.addEventListener("scroll", unlockAudio, { once: true });
+    window.addEventListener("keydown", unlockAudio, { once: true });
+}
 
 document.getElementById("btnTestAlarm").addEventListener("click", () => {
     if (!audioUnlocked) {
@@ -1986,6 +2054,8 @@ window.addEventListener("resize", () => {
     currentRange = getDateRange("today");
     limitMarkers();
     initLocationButton();
+    autoUnlockAudio();
+
     initNotificationSystem(); // Initialize push notifications
     fetchNewEvents(); // initial load
 
