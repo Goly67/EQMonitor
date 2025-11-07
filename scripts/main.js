@@ -1087,6 +1087,8 @@ async function fetchNewEvents() {
             }
         } else if (currentSource === "emsc") {
             url = CONFIG.EMSC_ENDPOINT;
+        } else if (currentSource === "forestparty") {
+            url = "https://earthquakeapi.forestparty223.workers.dev/api/earthquakes";
         }
 
         // ✅ Try to fetch from PHIVOLCS / other sources
