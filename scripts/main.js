@@ -242,6 +242,95 @@ function updateNotificationUI() {
 }
 
 /************************************************************************
+ * AUDIO SYSTEM
+ ************************************************************************/
+
+/**
+ * Unlock audio (manual + automatic)
+ */
+function unlockAudio() {
+  if (audioUnlocked) return;
+  try {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    const resume = async () => {
+      try {
+        if (audioContext.state === "suspended") await audioContext.resume();
+
+        // Touch audio once to make browser allow playback
+        await quakeSound.play().catch(() => {});
+        await quakeNearby.play().catch(() => {});
+        await alarmSound.play().catch(() => {});
+        [quakeSound, quakeNearby, alarmSound].forEach(a => {
+          a.pause();
+          a.currentTime = 0;
+        });
+
+        audioUnlocked = true;
+        console.log("🎧 Audio unlocked!");
+
+        const btn = document.getElementById("btnUnlockAudio");
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "EARTHQUAKE AUDIO IS ON";
+        }
+
+        window.removeEventListener("click", unlockAudio);
+        window.removeEventListener("scroll", unlockAudio);
+        window.removeEventListener("keydown", unlockAudio);
+      } catch (err) {
+        console.warn("Audio unlock failed:", err);
+      }
+    };
+
+    resume();
+  } catch (err) {
+    console.error("Error initializing AudioContext:", err);
+  }
+}
+
+/**
+ * Automatically unlock after first user gesture
+ */
+function autoUnlockAudio() {
+  if (audioUnlocked) return;
+  ["click", "scroll", "keydown"].forEach(event => {
+    window.addEventListener(event, unlockAudio, { once: true });
+  });
+}
+
+/**
+ * Manual unlock button (optional)
+ */
+document.getElementById("btnUnlockAudio")?.addEventListener("click", unlockAudio);
+
+/**
+ * Play earthquake sounds
+ */
+function playQuakeSound(isNearby = false, magnitude = 0) {
+  if (!audioUnlocked) {
+    console.warn("Audio not unlocked yet, skipping sound.");
+    return;
+  }
+
+  const sound =
+    isNearby && magnitude >= 4.0
+      ? alarmSound
+      : isNearby
+      ? quakeNearby
+      : quakeSound;
+
+  sound.currentTime = 0;
+  sound
+    .play()
+    .then(() => console.log("Played quake sound:", sound.id))
+    .catch(err => console.warn("Audio play failed:", err));
+}
+
+
+/************************************************************************
  * AUDIO SETUP
  ************************************************************************/
 let audioUnlocked = false;
@@ -731,293 +820,349 @@ function showNotification(ev, marker) {
 }
 
 /************************************************************************
- * BROWSER PUSH NOTIFICATIONS
+ * NOTIFICATION & SOUND - Fixed and consolidated
+ ************************************************************************/
+// Helper: format time to readable string (example, adjust to your format)
+function formatDateTime(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString();
+  } catch (e) {
+    return String(iso);
+  }
+}
+
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  // Haversine formula
+  function toRad(v) { return v * Math.PI / 180; }
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/************************************************************************
+ * showNotification - called when a new quake event is processed
+ ************************************************************************/
+function showNotification(ev, marker) {
+  const quakeId = ev.id;
+
+  // Only update UI local notifs if quakeId changed
+  if (quakeId !== currentNotificationId) {
+    currentNotificationId = quakeId;
+    const isAlert = ev.magnitude >= 5.0;
+    const title = `Magnitude ${ev.magnitude} Earthquake`;
+    const message = `${ev.location} (${ev.depth ?? '?'} km depth)`;
+
+    addNotification(title, message, isAlert, formatDateTime(ev.time));
+  }
+
+  // Only send desktop/system notification if it's a different quake than last notified
+  if (quakeId && quakeId !== lastNotifiedEarthquakeId) {
+    console.log('[Notification] NEW EARTHQUAKE - will attempt to notify.');
+    console.log('[Notification] Earthquake ID:', quakeId);
+    console.log('[Notification] Last notified ID:', lastNotifiedEarthquakeId);
+    lastNotifiedEarthquakeId = quakeId;
+    sendBrowserNotification(ev, `Magnitude ${ev.magnitude} Earthquake`, `${ev.location}`, ev.magnitude >= 5.0);
+  } else {
+    console.log('[Notification] Skipping notification (duplicate or no id).');
+  }
+
+  // Determine if nearby for sound
+  let isNearby = false;
+  if (userLocation && ev.lat != null && ev.lon != null) {
+    const dist = getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon);
+    if (dist <= 100) isNearby = true;
+  }
+  setTimeout(() => playQuakeSound(isNearby, ev.magnitude), 100);
+}
+
+/************************************************************************
+ * SERVICE WORKER registration (robust)
+ ************************************************************************/
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) {
+    console.warn('[Service Worker] Not supported in this browser.');
+    return null;
+  }
+
+  // Notifications and ServiceWorkers require secure origin (https) unless localhost.
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    console.warn('[Service Worker] Page is not secure (HTTPS). Service workers & notifications may fail.');
+  }
+
+  const tryPaths = [
+    '/sw.js',
+    '/EQMonitor/sw.js',
+    './sw.js'
+  ];
+
+  for (const p of tryPaths) {
+    try {
+      console.log(`[Service Worker] Trying to register ${p}`);
+      const reg = await navigator.serviceWorker.register(p, { scope: '/' });
+      serviceWorkerRegistration = reg;
+      console.log('[Service Worker] Registered at:', p, reg);
+      setupServiceWorkerListeners(reg);
+      return reg;
+    } catch (err) {
+      console.warn(`[Service Worker] Failed to register ${p}:`, err && err.message ? err.message : err);
+    }
+  }
+
+  console.error('[Service Worker] All registration attempts failed.');
+  return null;
+}
+
+function setupServiceWorkerListeners(registration) {
+  if (!registration) return;
+  registration.addEventListener('updatefound', () => {
+    const newWorker = registration.installing;
+    console.log('[Service Worker] updatefound, newWorker state:', newWorker && newWorker.state);
+    if (newWorker) {
+      newWorker.addEventListener('statechange', () => {
+        console.log('[Service Worker] New worker state:', newWorker.state);
+      });
+    }
+  });
+}
+
+/************************************************************************
+ * Request permission helpers (use a real user gesture)
  ************************************************************************/
 async function requestNotificationPermission() {
-    if (!('Notification' in window)) {
-        console.warn('This browser does not support notifications');
-        return false;
-    }
+  if (!('Notification' in window)) {
+    console.warn('[Notification] Browser does not support the Notifications API.');
+    return false;
+  }
 
-    if (Notification.permission === 'granted') {
-        notificationPermission = 'granted';
-        return true;
-    }
-
-    if (Notification.permission === 'denied') {
-        console.warn('Notification permission denied');
-        notificationPermission = 'denied';
-        return false;
-    }
-
-    // Request permission
-    try {
-        const permission = await Notification.requestPermission();
-        notificationPermission = permission;
-
-        if (permission === 'granted') {
-            console.log('Notification permission granted');
-            return true;
-        } else {
-            console.log('Notification permission denied');
-            return false;
-        }
-    } catch (error) {
-        console.error('Error requesting notification permission:', error);
-        return false;
-    }
-}
-
-async function registerServiceWorker() {
-    if (!('serviceWorker' in navigator)) {
-        console.warn('[Service Worker] Service Workers are not supported in this browser');
-        return null;
-    }
-
-    try {
-        console.log('[Service Worker] Attempting to register service worker...');
-        const registration = await navigator.serviceWorker.register('/EQMonitor/sw.js', {
-            scope: '/'
-        });
-
-        console.log('[Service Worker] Registered successfully:', registration);
-        serviceWorkerRegistration = registration;
-
-        // Wait for service worker to be ready
-        if (registration.installing) {
-            console.log('[Service Worker] Service worker is installing...');
-            await new Promise((resolve) => {
-                registration.installing.addEventListener('statechange', function () {
-                    console.log('[Service Worker] State changed to:', this.state);
-                    if (this.state === 'activated' || this.state === 'installed') {
-                        resolve();
-                    }
-                });
-            });
-        } else if (registration.waiting) {
-            console.log('[Service Worker] Service worker is waiting...');
-        } else if (registration.active) {
-            console.log('[Service Worker] Service worker is already active');
-        }
-
-        // Check for updates
-        registration.addEventListener('updatefound', () => {
-            console.log('[Service Worker] Update found');
-            const newWorker = registration.installing;
-            newWorker.addEventListener('statechange', () => {
-                console.log('[Service Worker] New worker state:', newWorker.state);
-                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    console.log('[Service Worker] New service worker available');
-                }
-            });
-        });
-
-        return registration;
-    } catch (error) {
-        console.error('[Service Worker] Registration failed:', error);
-        console.error('[Service Worker] Error details:', error.message, error.stack);
-        return null;
-    }
-}
-
-async function sendBrowserNotification(ev, title, message, isAlert) {
-    // Always check the actual permission status, not the cached variable
-    const currentPermission = Notification.permission;
-
-    if (currentPermission !== 'granted') {
-        console.warn('[Notification] Permission not granted. Current status:', currentPermission);
-        console.warn('[Notification] Please click "Enable Push Notifications" button to grant permission');
-        return;
-    }
-
-    // Update permission state to match actual permission
+  if (Notification.permission === 'granted') {
     notificationPermission = 'granted';
+    return true;
+  }
+  if (Notification.permission === 'denied') {
+    notificationPermission = 'denied';
+    return false;
+  }
 
-    console.log('[Notification] ===== SENDING DESKTOP PUSH NOTIFICATION =====');
-    console.log('[Notification] Earthquake ID:', ev.id);
-    console.log('[Notification] Title:', title);
-    console.log('[Notification] Message:', message);
-    console.log('[Notification] Is Alert:', isAlert);
+  try {
+    const permission = await Notification.requestPermission();
+    notificationPermission = permission;
+    console.log('[Notification] requestPermission result:', permission);
+    return permission === 'granted';
+  } catch (err) {
+    console.error('[Notification] requestPermission error:', err);
+    return false;
+  }
+}
 
-    function shortenLocation(location) {
-        if (!location) return 'Unknown Location';
+/*
+ * Force permission: this attaches to a visible button (user gesture)
+ * If you already have a button with id="btnEnableNotifications", it uses that.
+ * If not, it creates a small floating button.
+ */
+function forceNotificationPermission() {
+  // If already granted or denied, nothing to do
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') return;
+  if (Notification.permission === 'denied') return;
 
-        // Remove the directional part like "036 km N 35° E of"
-        let shortLoc = location
-            .replace(/\d+\s*km\s*[NS]\s*\d+°\s*[EW]\s*of\s*/gi, '')
-            .replace(/^\d+\s*km\s*/gi, '')
-            .trim();
+  let btn = document.getElementById('btnEnableNotifications');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'btnEnableNotifications';
+    btn.textContent = 'Enable Push Notifications';
+    // simple unobtrusive style; you can style via CSS instead
+    btn.style.position = 'fixed';
+    btn.style.right = '12px';
+    btn.style.bottom = '12px';
+    btn.style.zIndex = 9999;
+    btn.style.padding = '8px 12px';
+    btn.style.borderRadius = '8px';
+    btn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+    document.body.appendChild(btn);
+  }
 
-        const match = shortLoc.match(/^([A-Za-zÀ-ÿ\s'’\-.]+(?:\s*\([^)]+\))?)/);
-        if (match) {
-            shortLoc = match[1].trim();
-        }
-
-        // Safety check: prevent overlong text
-        if (shortLoc.length > 60) {
-            shortLoc = shortLoc.substring(0, 57) + '...';
-        }
-
-        return shortLoc;
-    }
-
-    const shortLocation = shortenLocation(ev.location);
-
-    // Determine distance for context
-    let distanceText = '';
-    if (userLocation) {
-        const dist = getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon);
-        distanceText = dist <= 100
-            ? `⚠️ NEARBY - ${Math.round(dist)} km away`
-            : `${Math.round(dist)} km away`;
-    }
-
-    // Format: Depth below magnitude, then location, then distance, then time
-    const notificationBody = `${ev.depth ?? '?'} km depth\n${shortLocation}${distanceText ? '\n' + distanceText : ''}\nTime: ${formatDateTime(ev.time)}`;
-
-    // Use absolute path for icon or relative to root
-    const iconPath = window.location.origin + '/logo.png';
-
-    const notificationOptions = {
-        body: notificationBody,
-        icon: iconPath,
-        badge: iconPath,
-        tag: `earthquake-${ev.id}`,
-        requireInteraction: isAlert, // Keep high-magnitude alerts visible until user interacts
-        timestamp: ev.time ? new Date(ev.time).getTime() : Date.now(),
-        vibrate: isAlert ? [200, 100, 200, 100, 200] : [200, 100, 200],
-        data: {
-            url: window.location.href,
-            earthquakeId: ev.id,
-            magnitude: ev.magnitude,
-            location: ev.location
-        }
-    };
-
+  btn.disabled = false;
+  btn.style.opacity = 1;
+  btn.addEventListener('click', async function handler(e) {
+    btn.disabled = true;
+    btn.textContent = 'Requesting...';
     try {
-        // Always use direct Notification API for desktop notifications
-        if (Notification.permission === 'granted') {
-            console.log('[Notification] Creating desktop notification using Notification API');
-            console.log('[Notification] Options:', notificationOptions);
-
-            // Create desktop notification - this will show as a system notification
-            const notification = new Notification(title, notificationOptions);
-
-            console.log('[Notification] ✅ Desktop notification object created:', notification);
-
-            // Handle click - focus window when notification is clicked
-            notification.onclick = (event) => {
-                console.log('[Notification] Notification clicked');
-                event.preventDefault();
-                window.focus();
-                notification.close();
-            };
-
-            // Handle errors
-            notification.onerror = (error) => {
-                console.error('[Notification] ❌ Desktop notification error:', error);
-                console.error('[Notification] Error type:', typeof error);
-            };
-
-            // Log when notification is shown
-            notification.onshow = () => {
-                console.log('[Notification] ✅✅✅ Desktop notification DISPLAYED successfully!');
-            };
-
-
-            // Store notification reference to prevent garbage collection
-            window._lastNotification = notification;
-
-            // Auto-close after 10 seconds if not high priority
-            if (!isAlert) {
-                setTimeout(() => {
-                    if (notification) {
-                        notification.close();
-                    }
-                }, 10000);
-            }
-
-            // Double-check: verify notification was created
-            if (!notification) {
-                console.error('[Notification] ❌ Notification object is null/undefined!');
-            }
-        } else {
-            console.warn('[Notification] ❌ Cannot show desktop notification - permission not granted');
-            console.warn('[Notification] Current permission:', Notification.permission);
-        }
-    } catch (error) {
-        console.error('[Notification] ❌❌❌ ERROR creating desktop notification:', error);
-        console.error('[Notification] Error name:', error.name);
-        console.error('[Notification] Error message:', error.message);
-        console.error('[Notification] Error stack:', error.stack);
-
-        // If direct API fails, try service worker as fallback
-        if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
-            try {
-                console.log('[Notification] Attempting fallback to service worker');
-                await serviceWorkerRegistration.showNotification(title, notificationOptions);
-                console.log('[Notification] Service worker notification sent');
-            } catch (swError) {
-                console.error('[Notification] Service worker fallback also failed:', swError);
-            }
-        }
+      const ok = await requestNotificationPermission();
+      if (ok) {
+        btn.textContent = '✓ Notifications Enabled';
+        btn.style.background = '#28a745';
+        btn.disabled = true;
+      } else {
+        btn.textContent = 'Notifications Blocked';
+        btn.disabled = false;
+      }
+    } catch (err) {
+      console.error('forceNotificationPermission error:', err);
+      btn.disabled = false;
+      btn.textContent = 'Enable Push Notifications';
     }
+    btn.removeEventListener('click', handler);
+  }, { once: true });
 }
 
-function triggerPermissionPrompt() {
-    if (Notification.permission === 'default') {
-        // Add a tiny overlay that auto-clicks itself on user interaction
-        const hiddenBtn = document.createElement('button');
-        hiddenBtn.style.position = 'absolute';
-        hiddenBtn.style.opacity = '0';
-        hiddenBtn.style.pointerEvents = 'none';
-        document.body.appendChild(hiddenBtn);
+/************************************************************************
+ * Create desktop notification (with fallback to service worker)
+ ************************************************************************/
+async function sendBrowserNotification(ev, title, message, isAlert) {
+  if (!('Notification' in window)) {
+    console.warn('[Notification] Browser lacks Notification API.');
+    return;
+  }
 
-        const handler = async () => {
-            try {
-                console.log('[Notification] Asking permission via trusted user gesture...');
-                await hiddenBtn.click(); // Must be inside real user click
-                const permission = await Notification.requestPermission();
-                console.log('Notification result:', permission);
-            } catch (err) {
-                console.error('Permission error:', err);
-            }
-            window.removeEventListener('click', handler);
-            hiddenBtn.remove();
-        };
+  // Always check actual permission
+  const currentPermission = Notification.permission;
+  if (currentPermission !== 'granted') {
+    console.warn('[Notification] Permission not granted:', currentPermission);
+    return;
+  }
+  notificationPermission = 'granted';
 
-        // Hook into any first user click
-        window.addEventListener('click', handler, { once: true });
+  // Shorten location safely
+  function shortenLocation(loc) {
+    if (!loc) return 'Unknown location';
+    let shortLoc = loc
+      .replace(/\d+\s*km\s*[NSEWnsew]+\s*\d+°\s*[NSEWnsew]*\s*of\s*/gi, '') // try strip "036 km N 35° E of"
+      .replace(/^\d+\s*km\s*/gi, '')
+      .replace(/\n|\t/g, ' ')
+      .trim();
+    // keep only leading part (like "Manay (Davao Oriental)")
+    const match = shortLoc.match(/^([A-Za-zÀ-ÿ0-9\s'’\-\.\(\)]+)(?:,|$)/);
+    if (match && match[1]) shortLoc = match[1].trim();
+    if (shortLoc.length > 90) shortLoc = shortLoc.slice(0, 87) + '...';
+    return shortLoc || 'Unknown location';
+  }
+
+  const shortLocation = shortenLocation(ev.location);
+
+  // Distance text
+  let distanceText = '';
+  if (userLocation && ev.lat != null && ev.lon != null) {
+    const d = Math.round(getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon));
+    distanceText = d <= 100 ? `⚠️ NEARBY - ${d} km away` : `${d} km away`;
+  }
+
+  const bodyParts = [
+    `${ev.depth ?? '?'} km depth`,
+    shortLocation,
+    distanceText || null,
+    `Time: ${formatDateTime(ev.time)}`
+  ].filter(Boolean);
+
+  const notificationBody = bodyParts.join('\n');
+
+  // Icon path: adjust if your icon is located elsewhere
+  const iconPath = window.location.origin + '/logo.png';
+
+  const notificationOptions = {
+    body: notificationBody,
+    icon: iconPath,
+    badge: iconPath,
+    tag: `earthquake-${ev.id}`,
+    requireInteraction: !!isAlert,
+    vibrate: isAlert ? [200, 100, 200, 100, 200] : [200, 100, 200],
+    data: {
+      url: window.location.href,
+      earthquakeId: ev.id,
+      magnitude: ev.magnitude,
+      location: ev.location
     }
+  };
+
+  try {
+    // Primary: direct Notification API (works for desktop)
+    const n = new Notification(title, notificationOptions);
+    console.log('[Notification] Created via Notification constructor:', n);
+    n.onclick = (evt) => {
+      evt.preventDefault();
+      window.focus();
+      try { n.close(); } catch {}
+    };
+    n.onshow = () => console.log('[Notification] displayed');
+    n.onerror = (err) => console.error('[Notification] error', err);
+
+    // Keep reference to avoid immediate GC in some browsers
+    window._lastNotification = n;
+
+    // Auto-close non-alerts
+    if (!isAlert) {
+      setTimeout(() => {
+        try { n.close(); } catch (e) {}
+      }, 10000);
+    }
+
+  } catch (err) {
+    console.error('[Notification] Constructor failed, trying service worker fallback:', err);
+    // Fallback - show via service worker registration if available
+    try {
+      if (serviceWorkerRegistration && typeof serviceWorkerRegistration.showNotification === 'function') {
+        await serviceWorkerRegistration.showNotification(title, notificationOptions);
+        console.log('[Notification] Shown via service worker.');
+      } else {
+        console.warn('[Notification] No active service worker registration for fallback.');
+      }
+    } catch (swErr) {
+      console.error('[Notification] ServiceWorker fallback failed:', swErr);
+    }
+  }
 }
 
-// Initialize notification system on page load
+/************************************************************************
+ * Initialization - run on page load
+ ************************************************************************/
 async function initNotificationSystem() {
-    await registerServiceWorker();
-    triggerPermissionPrompt();
+  // Register worker
+  await registerServiceWorker();
 
-    notificationPermission = Notification.permission;
+  // Sync local var with real permission
+  notificationPermission = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
+  console.log('[Notification] Current permission at init:', notificationPermission);
 
-    // Check if notifications are already enabled
-    if (Notification.permission === 'granted') {
-        const btn = document.getElementById('btnEnableNotifications');
-        if (btn) {
-            btn.textContent = '✓ Notifications Enabled';
-            btn.style.background = '#28a745';
-            btn.disabled = true;
-        }
-        console.log('[Notification] Notifications already enabled on page load');
-    } else {
-        console.log('[Notification] Notifications not enabled. Current permission:', Notification.permission);
+  // If not granted, create a visible enable button for user to click
+  if (notificationPermission !== 'granted') {
+    forceNotificationPermission();
+  } else {
+    // update UI if you have a button
+    const btn = document.getElementById('btnEnableNotifications');
+    if (btn) {
+      btn.textContent = '✓ Notifications Enabled';
+      btn.style.background = '#28a745';
+      btn.disabled = true;
     }
-
-    if (Notification.permission !== 'granted') {
-        console.log('[Notification] Waiting for user interaction to request permission...');
-        forceNotificationPermission();
-    } else {
-        console.log('[Notification] Permission already granted.');
-    }
+    console.log('[Notification] Permission already granted at init.');
+  }
 }
+
+/************************************************************************
+ * Simple placeholder functions used above - replace with your app functions
+ ************************************************************************/
+function addNotification(title, message, isAlert, time) {
+  // Your in-app UI notification insertion logic here
+  console.log('[addNotification] ', title, message, isAlert, time);
+}
+
+function playQuakeSound(isNearby, magnitude) {
+  // Your sound logic
+  console.log('[playQuakeSound] isNearby:', isNearby, 'mag:', magnitude);
+}
+
+window.addEventListener('click', async function handleFirstClick() {
+  if (Notification.permission === 'default') {
+    console.log('[AutoPermission] Requesting permission after first user gesture...');
+    await requestNotificationPermission();
+  }
+  window.removeEventListener('click', handleFirstClick);
+});
 
 
 let audioCtx = null;
