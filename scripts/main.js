@@ -1028,20 +1028,24 @@ async function sendBrowserNotification(ev, title, message, isAlert) {
   }
   notificationPermission = 'granted';
 
-  // Shorten location safely
   function shortenLocation(loc) {
-    if (!loc) return 'Unknown location';
-    let shortLoc = loc
-      .replace(/\d+\s*km\s*[NSEWnsew]+\s*\d+°\s*[NSEWnsew]*\s*of\s*/gi, '') // try strip "036 km N 35° E of"
-      .replace(/^\d+\s*km\s*/gi, '')
-      .replace(/\n|\t/g, ' ')
-      .trim();
-    // keep only leading part (like "Manay (Davao Oriental)")
-    const match = shortLoc.match(/^([A-Za-zÀ-ÿ0-9\s'’\-\.\(\)]+)(?:,|$)/);
-    if (match && match[1]) shortLoc = match[1].trim();
-    if (shortLoc.length > 90) shortLoc = shortLoc.slice(0, 87) + '...';
-    return shortLoc || 'Unknown location';
+  if (!loc) return 'Unknown location';
+
+  let shortLoc = loc.replace(/\s+/g, ' ').trim();
+
+  if (shortLoc.toLowerCase().includes(' of ')) {
+    shortLoc = shortLoc.split(/\s+of\s+/i).pop().trim();
   }
+
+  // Clean up any tabs or newlines
+  shortLoc = shortLoc.replace(/\n|\t/g, ' ').trim();
+
+  // Limit to prevent super long names
+  if (shortLoc.length > 90) shortLoc = shortLoc.slice(0, 87) + '...';
+
+  return shortLoc || 'Unknown location';
+}
+
 
   const shortLocation = shortenLocation(ev.location);
 
@@ -1062,7 +1066,7 @@ async function sendBrowserNotification(ev, title, message, isAlert) {
   const notificationBody = bodyParts.join('\n');
 
   // Icon path: adjust if your icon is located elsewhere
-  const iconPath = window.location.origin + '/logo.png';
+  const iconPath = 'https://raw.githubusercontent.com/Goly67/EQMonitor/main/logo.png';
 
   const notificationOptions = {
     body: notificationBody,
