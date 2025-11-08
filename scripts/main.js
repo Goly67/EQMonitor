@@ -242,130 +242,67 @@ function updateNotificationUI() {
 }
 
 /************************************************************************
- * AUDIO SYSTEM
+ * FIXED SINGLE AUDIO SYSTEM
  ************************************************************************/
-
-/**
- * Unlock audio (manual + automatic)
- */
-function unlockAudio() {
-  if (audioUnlocked) return;
-  try {
-    if (!audioContext) {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
-
-    const resume = async () => {
-      try {
-        if (audioContext.state === "suspended") await audioContext.resume();
-
-        // Touch audio once to make browser allow playback
-        await quakeSound.play().catch(() => {});
-        await quakeNearby.play().catch(() => {});
-        await alarmSound.play().catch(() => {});
-        [quakeSound, quakeNearby, alarmSound].forEach(a => {
-          a.pause();
-          a.currentTime = 0;
-        });
-
-        audioUnlocked = true;
-        console.log("🎧 Audio unlocked!");
-
-        const btn = document.getElementById("btnUnlockAudio");
-        if (btn) {
-          btn.disabled = true;
-          btn.textContent = "EARTHQUAKE AUDIO IS ON";
-        }
-
-        window.removeEventListener("click", unlockAudio);
-        window.removeEventListener("scroll", unlockAudio);
-        window.removeEventListener("keydown", unlockAudio);
-      } catch (err) {
-        console.warn("Audio unlock failed:", err);
-      }
-    };
-
-    resume();
-  } catch (err) {
-    console.error("Error initializing AudioContext:", err);
-  }
-}
-
-/**
- * Automatically unlock after first user gesture
- */
-function autoUnlockAudio() {
-  if (audioUnlocked) return;
-  ["click", "scroll", "keydown"].forEach(event => {
-    window.addEventListener(event, unlockAudio, { once: true });
-  });
-}
-
-/**
- * Manual unlock button (optional)
- */
-document.getElementById("btnUnlockAudio")?.addEventListener("click", unlockAudio);
-
-/**
- * Play earthquake sounds
- */
-function playQuakeSound(isNearby = false, magnitude = 0) {
-  if (!audioUnlocked) {
-    console.warn("Audio not unlocked yet, skipping sound.");
-    return;
-  }
-
-  const sound =
-    isNearby && magnitude >= 4.0
-      ? alarmSound
-      : isNearby
-      ? quakeNearby
-      : quakeSound;
-
-  sound.currentTime = 0;
-  sound
-    .play()
-    .then(() => console.log("Played quake sound:", sound.id))
-    .catch(err => console.warn("Audio play failed:", err));
-}
-
-
-/************************************************************************
- * AUDIO SETUP
- ************************************************************************/
-let audioUnlocked = false;
 const quakeSound = document.getElementById("quakeSound");
 const quakeNearby = document.getElementById("quakeNearbySound");
 const alarmSound = document.getElementById("alarmSound");
+const unlockBtn = document.getElementById("btnUnlockAudio");
 
-// Unlock audio on first user gesture
+let audioUnlocked = false;
+
+// 🔓 Unlock on first user action
 function unlockAudio() {
     if (audioUnlocked) return;
-
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === "suspended") {
-        ctx.resume().then(() => {
-            audioUnlocked = true;
-            console.log("Audio unlocked via AudioContext");
-        }).catch(console.warn);
-    } else {
+    try {
+        [quakeSound, quakeNearby, alarmSound].forEach(a => {
+            a.play().then(() => {
+                a.pause();
+                a.currentTime = 0;
+            }).catch(() => {});
+        });
         audioUnlocked = true;
-        console.log("Audio unlocked");
+        console.log("🎧 Audio unlocked and ready!");
+
+        if (unlockBtn) {
+            unlockBtn.disabled = true;
+            unlockBtn.textContent = "EARTHQUAKE AUDIO IS ON";
+        }
+    } catch (err) {
+        console.warn("Audio unlock failed:", err);
     }
 }
 
+// 👆 Unlock on first interaction
+["click", "scroll", "keydown", "touchstart"].forEach(ev =>
+    window.addEventListener(ev, unlockAudio, { once: true })
+);
+
+// 🧩 Manual unlock button
+unlockBtn?.addEventListener("click", unlockAudio);
+
+// 🔊 Play sound
 function playQuakeSound(isNearby = false, magnitude = 0) {
-    if (!audioUnlocked) return;
-
-    if (isNearby && magnitude >= 4.0) {
-        alarmSound.currentTime = 0;
-        alarmSound.play().catch(err => console.warn("Alarm play failed:", err));
-    } else {
-        const audio = isNearby ? quakeNearby : quakeSound;
-        audio.currentTime = 0;
-        audio.play().catch(err => console.warn("Audio play failed:", err));
+    if (!audioUnlocked) {
+        console.warn("Audio locked, skipping quake sound.");
+        return;
     }
+
+    console.log("[playQuakeSound] Playing sound (isNearby:", isNearby, "mag:", magnitude, ")");
+
+    let sound;
+    if (magnitude >= 5.0) {
+        sound = alarmSound;
+    } else if (isNearby) {
+        sound = quakeNearby;
+    } else {
+        sound = quakeSound;
+    }
+
+    sound.currentTime = 0;
+    sound.play().catch(err => console.warn("Audio play failed:", err));
 }
+
 
 /************************************************************************
  * CONFIG
@@ -1155,11 +1092,6 @@ function addNotification(title, message, isAlert, time) {
   console.log('[addNotification] ', title, message, isAlert, time);
 }
 
-function playQuakeSound(isNearby, magnitude) {
-  // Your sound logic
-  console.log('[playQuakeSound] isNearby:', isNearby, 'mag:', magnitude);
-}
-
 window.addEventListener('click', async function handleFirstClick() {
   if (Notification.permission === 'default') {
     console.log('[AutoPermission] Requesting permission after first user gesture...');
@@ -1495,45 +1427,6 @@ document.getElementById("btnApplyRange").addEventListener("click", () => {
 
 let audioContext;
 
-function autoUnlockAudio() {
-    if (audioUnlocked) return;
-
-    // Create a new audio context if needed
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-    const unlockAudio = async () => {
-        if (audioUnlocked) return;
-
-        try {
-            if (audioContext.state === "suspended") {
-                await audioContext.resume();
-            }
-
-            audioUnlocked = true;
-            console.log("🎧 Audio unlocked automatically after first interaction!");
-
-            // Update UI if button exists
-            const btn = document.getElementById("btnUnlockAudio");
-            if (btn) {
-                btn.disabled = true;
-                btn.textContent = "EARTHQUAKE AUDIO IS ON";
-            }
-
-            // Clean up listeners
-            window.removeEventListener("click", unlockAudio);
-            window.removeEventListener("scroll", unlockAudio);
-            window.removeEventListener("keydown", unlockAudio);
-        } catch (err) {
-            console.warn("Audio unlock failed:", err);
-        }
-    };
-
-    // Wait for first real interaction
-    window.addEventListener("click", unlockAudio, { once: true });
-    window.addEventListener("scroll", unlockAudio, { once: true });
-    window.addEventListener("keydown", unlockAudio, { once: true });
-}
-
 document.getElementById("btnTestAlarm").addEventListener("click", () => {
     if (!audioUnlocked) {
         showCustomAlert("Please unlock audio first by clicking 'Unlock Audio' button");
@@ -1598,8 +1491,6 @@ document.getElementById("btnTestAlarm").addEventListener("click", () => {
     lastNotifiedEarthquakeId = null;
     currentNotificationId = null;
 
-    // Add the marker - this will trigger showNotification and playQuakeSound
-    // The alarm will only play if the earthquake is within 100km (isNearby = true) and magnitude >= 4.0
     addOrUpdateEventMarker(normalizeEvent(testEv), true, true);
 });
 
@@ -2177,8 +2068,6 @@ window.addEventListener("resize", () => {
     currentRange = getDateRange("today");
     limitMarkers();
     initLocationButton();
-    autoUnlockAudio();
-
     initNotificationSystem(); // Initialize push notifications
     fetchNewEvents(); // initial load
 
