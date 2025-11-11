@@ -259,7 +259,7 @@ function unlockAudio() {
             a.play().then(() => {
                 a.pause();
                 a.currentTime = 0;
-            }).catch(() => {});
+            }).catch(() => { });
         });
         audioUnlocked = true;
         console.log("🎧 Audio unlocked and ready!");
@@ -303,6 +303,21 @@ function playQuakeSound(isNearby = false, magnitude = 0) {
     sound.play().catch(err => console.warn("Audio play failed:", err));
 }
 
+function playQuakeSound(isNearby = false, magnitude = 0) {
+    if (!audioUnlocked) return;
+
+    let sound;
+    if (magnitude >= 4.5) {
+        sound = alarmSound;
+    } else if (isNearby) {
+        sound = quakeNearby;
+    } else {
+        sound = quakeSound;
+    }
+
+    const clone = sound.cloneNode();
+    clone.play().catch(err => console.warn("Audio play failed:", err));
+}
 
 /************************************************************************
  * CONFIG
@@ -344,14 +359,112 @@ function getCoverageDistance(mag) {
 /************************************************************************
  * MAP
  ************************************************************************/
-const map = L.map("map").setView([12.879721, 121.774017], 6);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    preferCanvas: true,
-    maxZoom: 18,
-    attribution: "© OpenStreetMap contributors",
-}).addTo(map);
-map.on("zoomend", updateCircleScaleByZoom);
 
+function isInPhilippines(feature) {
+  const coords = feature.geometry.coordinates;
+  if (feature.geometry.type === 'LineString') {
+    for (let point of coords) {
+      const [lng, lat] = point;
+      if (lat >= philippinesBounds.south && lat <= philippinesBounds.north &&
+          lng >= philippinesBounds.west && lng <= philippinesBounds.east) return true;
+    }
+    return false;
+  }
+  if (feature.geometry.type === 'MultiLineString') {
+    for (let line of coords) {
+      for (let point of line) {
+        const [lng, lat] = point;
+        if (lat >= philippinesBounds.south && lat <= philippinesBounds.north &&
+            lng >= philippinesBounds.west && lng <= philippinesBounds.east) return true;
+      }
+    }
+    return false;
+  }
+  return false;
+}
+
+// Optional UI helper you already had
+function showCustomAlert(msg) {
+  console.warn(msg);
+}
+
+// Boot Windy and start app
+function bootWindyAndStart() {
+  const options = {
+    key: 'vIOb0zSnqiwpWgkBvu1TJq3EngzJAQbW', // replace with a VALID key registered for your domain
+    lat: 12.8797,
+    lon: 121.7740,
+    zoom: 5,
+    overlay: 'rain'
+  };
+
+  // windyInit is provided by libBoot.js; runs async after Leaflet is present
+  window.windyInit(options, async function (windyAPI) {
+    try {
+      const map = windyAPI.map; // This is a Leaflet L.Map instance [web:18][web:1]
+
+      // Load overlays after map exists
+      await loadFaultLines(map);
+
+      // Call your earthquake renderer; ensure it accepts (map)
+      if (typeof renderEarthquakes === 'function') {
+        await renderEarthquakes(map);
+      }
+
+      // Example: allow switching overlays later
+      // windyAPI.store.set('overlay', 'wind'); // wind, rain, radar, satellite, temp, etc. [web:6]
+
+    } catch (err) {
+      // This block also catches authorization failures that prevent Windy from initializing
+      console.error('Windy initialization failed:', err);
+      showCustomAlert('Windy failed to initialize. Check your API key and allowed domains.');
+    }
+  });
+}
+
+// Load fault lines and add to the provided map
+async function loadFaultLines(map) {
+  try {
+    // Active faults
+    const response1 = await fetch('https://raw.githubusercontent.com/Goly67/EQMonitor/main/scripts/gem_active_faults.geojson', { cache: 'no-store' });
+    if (!response1.ok) throw new Error(`Faults fetch failed: ${response1.status}`);
+    const data1 = await response1.json();
+
+    if (faultLinesLayer) faultLinesLayer.remove();
+    faultLinesLayer = L.geoJSON(data1, {
+      filter: isInPhilippines,
+      style: {
+        color: 'red',
+        weight: 1.5,
+        opacity: 0.5
+      }
+    }).addTo(map);
+
+    // Harmonized faults
+    const response2 = await fetch('https://raw.githubusercontent.com/Goly67/EQMonitor/main/scripts/gem_active_faults_harmonized.geojson', { cache: 'no-store' });
+    if (!response2.ok) throw new Error(`Harmonized fetch failed: ${response2.status}`);
+    const data2 = await response2.json();
+
+    if (harmonizedFaultLinesLayer) harmonizedFaultLinesLayer.remove();
+    harmonizedFaultLinesLayer = L.geoJSON(data2, {
+      filter: isInPhilippines,
+      style: {
+        color: 'blue',
+        weight: 1,
+        opacity: 0.4,
+        dashArray: '5, 5'
+      }
+    }).addTo(map);
+
+    console.log('Philippine fault and trench lines loaded successfully.');
+  } catch (error) {
+    console.error('Error loading fault lines:', error);
+    showCustomAlert('Failed to load Philippine fault lines. Check file paths or hosting.');
+  }
+}
+
+// Start
+bootWindyAndStart();
 /************************************************************************
 * MASTER VOLUME CONTROL (affects all quake sounds)
 ************************************************************************/
@@ -761,140 +874,140 @@ function showNotification(ev, marker) {
  ************************************************************************/
 // Helper: format time to readable string (example, adjust to your format)
 function formatDateTime(iso) {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString();
-  } catch (e) {
-    return String(iso);
-  }
+    try {
+        const d = new Date(iso);
+        return d.toLocaleString();
+    } catch (e) {
+        return String(iso);
+    }
 }
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
-  // Haversine formula
-  function toRad(v) { return v * Math.PI / 180; }
-  const R = 6371;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+    // Haversine formula
+    function toRad(v) { return v * Math.PI / 180; }
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
 }
 
 /************************************************************************
  * showNotification - called when a new quake event is processed
  ************************************************************************/
 function showNotification(ev, marker) {
-  const quakeId = ev.id;
+    const quakeId = ev.id;
 
-  // Only update UI local notifs if quakeId changed
-  if (quakeId !== currentNotificationId) {
-    currentNotificationId = quakeId;
-    const isAlert = ev.magnitude >= 5.0;
-    const title = `Magnitude ${ev.magnitude} Earthquake`;
-    const message = `${ev.location} (${ev.depth ?? '?'} km depth)`;
+    // Only update UI local notifs if quakeId changed
+    if (quakeId !== currentNotificationId) {
+        currentNotificationId = quakeId;
+        const isAlert = ev.magnitude >= 5.0;
+        const title = `Magnitude ${ev.magnitude} Earthquake`;
+        const message = `${ev.location} (${ev.depth ?? '?'} km depth)`;
 
-    addNotification(title, message, isAlert, formatDateTime(ev.time));
-  }
+        addNotification(title, message, isAlert, formatDateTime(ev.time));
+    }
 
-  // Only send desktop/system notification if it's a different quake than last notified
-  if (quakeId && quakeId !== lastNotifiedEarthquakeId) {
-    console.log('[Notification] NEW EARTHQUAKE - will attempt to notify.');
-    console.log('[Notification] Earthquake ID:', quakeId);
-    console.log('[Notification] Last notified ID:', lastNotifiedEarthquakeId);
-    lastNotifiedEarthquakeId = quakeId;
-    sendBrowserNotification(ev, `Magnitude ${ev.magnitude} Earthquake`, `${ev.location}`, ev.magnitude >= 5.0);
-  } else {
-    console.log('[Notification] Skipping notification (duplicate or no id).');
-  }
+    // Only send desktop/system notification if it's a different quake than last notified
+    if (quakeId && quakeId !== lastNotifiedEarthquakeId) {
+        console.log('[Notification] NEW EARTHQUAKE - will attempt to notify.');
+        console.log('[Notification] Earthquake ID:', quakeId);
+        console.log('[Notification] Last notified ID:', lastNotifiedEarthquakeId);
+        lastNotifiedEarthquakeId = quakeId;
+        sendBrowserNotification(ev, `Magnitude ${ev.magnitude} Earthquake`, `${ev.location}`, ev.magnitude >= 5.0);
+    } else {
+        console.log('[Notification] Skipping notification (duplicate or no id).');
+    }
 
-  // Determine if nearby for sound
-  let isNearby = false;
-  if (userLocation && ev.lat != null && ev.lon != null) {
-    const dist = getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon);
-    if (dist <= 100) isNearby = true;
-  }
-  setTimeout(() => playQuakeSound(isNearby, ev.magnitude), 100);
+    // Determine if nearby for sound
+    let isNearby = false;
+    if (userLocation && ev.lat != null && ev.lon != null) {
+        const dist = getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon);
+        if (dist <= 100) isNearby = true;
+    }
+    setTimeout(() => playQuakeSound(isNearby, ev.magnitude), 100);
 }
 
 /************************************************************************
  * SERVICE WORKER registration (robust)
  ************************************************************************/
 async function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) {
-    console.warn('[Service Worker] Not supported in this browser.');
-    return null;
-  }
-
-  // Notifications and ServiceWorkers require secure origin (https) unless localhost.
-  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-    console.warn('[Service Worker] Page is not secure (HTTPS). Service workers & notifications may fail.');
-  }
-
-  const tryPaths = [
-    '/sw.js',
-    '/EQMonitor/sw.js',
-    './sw.js'
-  ];
-
-  for (const p of tryPaths) {
-    try {
-      console.log(`[Service Worker] Trying to register ${p}`);
-      const reg = await navigator.serviceWorker.register(p, { scope: '/' });
-      serviceWorkerRegistration = reg;
-      console.log('[Service Worker] Registered at:', p, reg);
-      setupServiceWorkerListeners(reg);
-      return reg;
-    } catch (err) {
-      console.warn(`[Service Worker] Failed to register ${p}:`, err && err.message ? err.message : err);
+    if (!('serviceWorker' in navigator)) {
+        console.warn('[Service Worker] Not supported in this browser.');
+        return null;
     }
-  }
 
-  console.error('[Service Worker] All registration attempts failed.');
-  return null;
+    // Notifications and ServiceWorkers require secure origin (https) unless localhost.
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        console.warn('[Service Worker] Page is not secure (HTTPS). Service workers & notifications may fail.');
+    }
+
+    const tryPaths = [
+        '/sw.js',
+        '/EQMonitor/sw.js',
+        './sw.js'
+    ];
+
+    for (const p of tryPaths) {
+        try {
+            console.log(`[Service Worker] Trying to register ${p}`);
+            const reg = await navigator.serviceWorker.register(p, { scope: '/' });
+            serviceWorkerRegistration = reg;
+            console.log('[Service Worker] Registered at:', p, reg);
+            setupServiceWorkerListeners(reg);
+            return reg;
+        } catch (err) {
+            console.warn(`[Service Worker] Failed to register ${p}:`, err && err.message ? err.message : err);
+        }
+    }
+
+    console.error('[Service Worker] All registration attempts failed.');
+    return null;
 }
 
 function setupServiceWorkerListeners(registration) {
-  if (!registration) return;
-  registration.addEventListener('updatefound', () => {
-    const newWorker = registration.installing;
-    console.log('[Service Worker] updatefound, newWorker state:', newWorker && newWorker.state);
-    if (newWorker) {
-      newWorker.addEventListener('statechange', () => {
-        console.log('[Service Worker] New worker state:', newWorker.state);
-      });
-    }
-  });
+    if (!registration) return;
+    registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        console.log('[Service Worker] updatefound, newWorker state:', newWorker && newWorker.state);
+        if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+                console.log('[Service Worker] New worker state:', newWorker.state);
+            });
+        }
+    });
 }
 
 /************************************************************************
  * Request permission helpers (use a real user gesture)
  ************************************************************************/
 async function requestNotificationPermission() {
-  if (!('Notification' in window)) {
-    console.warn('[Notification] Browser does not support the Notifications API.');
-    return false;
-  }
+    if (!('Notification' in window)) {
+        console.warn('[Notification] Browser does not support the Notifications API.');
+        return false;
+    }
 
-  if (Notification.permission === 'granted') {
-    notificationPermission = 'granted';
-    return true;
-  }
-  if (Notification.permission === 'denied') {
-    notificationPermission = 'denied';
-    return false;
-  }
+    if (Notification.permission === 'granted') {
+        notificationPermission = 'granted';
+        return true;
+    }
+    if (Notification.permission === 'denied') {
+        notificationPermission = 'denied';
+        return false;
+    }
 
-  try {
-    const permission = await Notification.requestPermission();
-    notificationPermission = permission;
-    console.log('[Notification] requestPermission result:', permission);
-    return permission === 'granted';
-  } catch (err) {
-    console.error('[Notification] requestPermission error:', err);
-    return false;
-  }
+    try {
+        const permission = await Notification.requestPermission();
+        notificationPermission = permission;
+        console.log('[Notification] requestPermission result:', permission);
+        return permission === 'granted';
+    } catch (err) {
+        console.error('[Notification] requestPermission error:', err);
+        return false;
+    }
 }
 
 /*
@@ -903,201 +1016,201 @@ async function requestNotificationPermission() {
  * If not, it creates a small floating button.
  */
 function forceNotificationPermission() {
-  // If already granted or denied, nothing to do
-  if (!('Notification' in window)) return;
-  if (Notification.permission === 'granted') return;
-  if (Notification.permission === 'denied') return;
+    // If already granted or denied, nothing to do
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') return;
+    if (Notification.permission === 'denied') return;
 
-  let btn = document.getElementById('btnEnableNotifications');
-  if (!btn) {
-    btn = document.createElement('button');
-    btn.id = 'btnEnableNotifications';
-    btn.textContent = 'Enable Push Notifications';
-    // simple unobtrusive style; you can style via CSS instead
-    btn.style.position = 'fixed';
-    btn.style.right = '12px';
-    btn.style.bottom = '12px';
-    btn.style.zIndex = 9999;
-    btn.style.padding = '8px 12px';
-    btn.style.borderRadius = '8px';
-    btn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
-    document.body.appendChild(btn);
-  }
-
-  btn.disabled = false;
-  btn.style.opacity = 1;
-  btn.addEventListener('click', async function handler(e) {
-    btn.disabled = true;
-    btn.textContent = 'Requesting...';
-    try {
-      const ok = await requestNotificationPermission();
-      if (ok) {
-        btn.textContent = '✓ Notifications Enabled';
-        btn.style.background = '#28a745';
-        btn.disabled = true;
-      } else {
-        btn.textContent = 'Notifications Blocked';
-        btn.disabled = false;
-      }
-    } catch (err) {
-      console.error('forceNotificationPermission error:', err);
-      btn.disabled = false;
-      btn.textContent = 'Enable Push Notifications';
+    let btn = document.getElementById('btnEnableNotifications');
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'btnEnableNotifications';
+        btn.textContent = 'Enable Push Notifications';
+        // simple unobtrusive style; you can style via CSS instead
+        btn.style.position = 'fixed';
+        btn.style.right = '12px';
+        btn.style.bottom = '12px';
+        btn.style.zIndex = 9999;
+        btn.style.padding = '8px 12px';
+        btn.style.borderRadius = '8px';
+        btn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+        document.body.appendChild(btn);
     }
-    btn.removeEventListener('click', handler);
-  }, { once: true });
+
+    btn.disabled = false;
+    btn.style.opacity = 1;
+    btn.addEventListener('click', async function handler(e) {
+        btn.disabled = true;
+        btn.textContent = 'Requesting...';
+        try {
+            const ok = await requestNotificationPermission();
+            if (ok) {
+                btn.textContent = '✓ Notifications Enabled';
+                btn.style.background = '#28a745';
+                btn.disabled = true;
+            } else {
+                btn.textContent = 'Notifications Blocked';
+                btn.disabled = false;
+            }
+        } catch (err) {
+            console.error('forceNotificationPermission error:', err);
+            btn.disabled = false;
+            btn.textContent = 'Enable Push Notifications';
+        }
+        btn.removeEventListener('click', handler);
+    }, { once: true });
 }
 
 /************************************************************************
  * Create desktop notification (with fallback to service worker)
  ************************************************************************/
 async function sendBrowserNotification(ev, title, message, isAlert) {
-  if (!('Notification' in window)) {
-    console.warn('[Notification] Browser lacks Notification API.');
-    return;
-  }
-
-  // Always check actual permission
-  const currentPermission = Notification.permission;
-  if (currentPermission !== 'granted') {
-    console.warn('[Notification] Permission not granted:', currentPermission);
-    return;
-  }
-  notificationPermission = 'granted';
-
-  function shortenLocation(loc) {
-  if (!loc) return 'Unknown location';
-
-  let shortLoc = loc.replace(/\s+/g, ' ').trim();
-
-  if (shortLoc.toLowerCase().includes(' of ')) {
-    shortLoc = shortLoc.split(/\s+of\s+/i).pop().trim();
-  }
-
-  // Clean up any tabs or newlines
-  shortLoc = shortLoc.replace(/\n|\t/g, ' ').trim();
-
-  // Limit to prevent super long names
-  if (shortLoc.length > 90) shortLoc = shortLoc.slice(0, 87) + '...';
-
-  return shortLoc || 'Unknown location';
-}
-
-
-  const shortLocation = shortenLocation(ev.location);
-
-  // Distance text
-  let distanceText = '';
-  if (userLocation && ev.lat != null && ev.lon != null) {
-    const d = Math.round(getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon));
-    distanceText = d <= 100 ? `⚠️ NEARBY - ${d} km away` : `${d} km away`;
-  }
-
-  const bodyParts = [
-    `${ev.depth ?? '?'} km depth`,
-    shortLocation,
-    distanceText || null,
-    `Time: ${formatDateTime(ev.time)}`
-  ].filter(Boolean);
-
-  const notificationBody = bodyParts.join('\n');
-
-  // Icon path: adjust if your icon is located elsewhere
-  const iconPath = 'https://raw.githubusercontent.com/Goly67/EQMonitor/main/logo.png';
-
-  const notificationOptions = {
-    body: notificationBody,
-    icon: iconPath,
-    badge: iconPath,
-    tag: `earthquake-${ev.id}`,
-    requireInteraction: !!isAlert,
-    vibrate: isAlert ? [200, 100, 200, 100, 200] : [200, 100, 200],
-    data: {
-      url: window.location.href,
-      earthquakeId: ev.id,
-      magnitude: ev.magnitude,
-      location: ev.location
+    if (!('Notification' in window)) {
+        console.warn('[Notification] Browser lacks Notification API.');
+        return;
     }
-  };
 
-  try {
-    // Primary: direct Notification API (works for desktop)
-    const n = new Notification(title, notificationOptions);
-    console.log('[Notification] Created via Notification constructor:', n);
-    n.onclick = (evt) => {
-      evt.preventDefault();
-      window.focus();
-      try { n.close(); } catch {}
+    // Always check actual permission
+    const currentPermission = Notification.permission;
+    if (currentPermission !== 'granted') {
+        console.warn('[Notification] Permission not granted:', currentPermission);
+        return;
+    }
+    notificationPermission = 'granted';
+
+    function shortenLocation(loc) {
+        if (!loc) return 'Unknown location';
+
+        let shortLoc = loc.replace(/\s+/g, ' ').trim();
+
+        if (shortLoc.toLowerCase().includes(' of ')) {
+            shortLoc = shortLoc.split(/\s+of\s+/i).pop().trim();
+        }
+
+        // Clean up any tabs or newlines
+        shortLoc = shortLoc.replace(/\n|\t/g, ' ').trim();
+
+        // Limit to prevent super long names
+        if (shortLoc.length > 90) shortLoc = shortLoc.slice(0, 87) + '...';
+
+        return shortLoc || 'Unknown location';
+    }
+
+
+    const shortLocation = shortenLocation(ev.location);
+
+    // Distance text
+    let distanceText = '';
+    if (userLocation && ev.lat != null && ev.lon != null) {
+        const d = Math.round(getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon));
+        distanceText = d <= 100 ? `⚠️ NEARBY - ${d} km away` : `${d} km away`;
+    }
+
+    const bodyParts = [
+        `${ev.depth ?? '?'} km depth`,
+        shortLocation,
+        distanceText || null,
+        `Time: ${formatDateTime(ev.time)}`
+    ].filter(Boolean);
+
+    const notificationBody = bodyParts.join('\n');
+
+    // Icon path: adjust if your icon is located elsewhere
+    const iconPath = 'https://raw.githubusercontent.com/Goly67/EQMonitor/main/logo.png';
+
+    const notificationOptions = {
+        body: notificationBody,
+        icon: iconPath,
+        badge: iconPath,
+        tag: `earthquake-${ev.id}`,
+        requireInteraction: !!isAlert,
+        vibrate: isAlert ? [200, 100, 200, 100, 200] : [200, 100, 200],
+        data: {
+            url: window.location.href,
+            earthquakeId: ev.id,
+            magnitude: ev.magnitude,
+            location: ev.location
+        }
     };
-    n.onshow = () => console.log('[Notification] displayed');
-    n.onerror = (err) => console.error('[Notification] error', err);
 
-    // Keep reference to avoid immediate GC in some browsers
-    window._lastNotification = n;
-
-    // Auto-close non-alerts
-    if (!isAlert) {
-      setTimeout(() => {
-        try { n.close(); } catch (e) {}
-      }, 10000);
-    }
-
-  } catch (err) {
-    console.error('[Notification] Constructor failed, trying service worker fallback:', err);
-    // Fallback - show via service worker registration if available
     try {
-      if (serviceWorkerRegistration && typeof serviceWorkerRegistration.showNotification === 'function') {
-        await serviceWorkerRegistration.showNotification(title, notificationOptions);
-        console.log('[Notification] Shown via service worker.');
-      } else {
-        console.warn('[Notification] No active service worker registration for fallback.');
-      }
-    } catch (swErr) {
-      console.error('[Notification] ServiceWorker fallback failed:', swErr);
+        // Primary: direct Notification API (works for desktop)
+        const n = new Notification(title, notificationOptions);
+        console.log('[Notification] Created via Notification constructor:', n);
+        n.onclick = (evt) => {
+            evt.preventDefault();
+            window.focus();
+            try { n.close(); } catch { }
+        };
+        n.onshow = () => console.log('[Notification] displayed');
+        n.onerror = (err) => console.error('[Notification] error', err);
+
+        // Keep reference to avoid immediate GC in some browsers
+        window._lastNotification = n;
+
+        // Auto-close non-alerts
+        if (!isAlert) {
+            setTimeout(() => {
+                try { n.close(); } catch (e) { }
+            }, 10000);
+        }
+
+    } catch (err) {
+        console.error('[Notification] Constructor failed, trying service worker fallback:', err);
+        // Fallback - show via service worker registration if available
+        try {
+            if (serviceWorkerRegistration && typeof serviceWorkerRegistration.showNotification === 'function') {
+                await serviceWorkerRegistration.showNotification(title, notificationOptions);
+                console.log('[Notification] Shown via service worker.');
+            } else {
+                console.warn('[Notification] No active service worker registration for fallback.');
+            }
+        } catch (swErr) {
+            console.error('[Notification] ServiceWorker fallback failed:', swErr);
+        }
     }
-  }
 }
 
 /************************************************************************
  * Initialization - run on page load
  ************************************************************************/
 async function initNotificationSystem() {
-  // Register worker
-  await registerServiceWorker();
+    // Register worker
+    await registerServiceWorker();
 
-  // Sync local var with real permission
-  notificationPermission = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
-  console.log('[Notification] Current permission at init:', notificationPermission);
+    // Sync local var with real permission
+    notificationPermission = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
+    console.log('[Notification] Current permission at init:', notificationPermission);
 
-  // If not granted, create a visible enable button for user to click
-  if (notificationPermission !== 'granted') {
-    forceNotificationPermission();
-  } else {
-    // update UI if you have a button
-    const btn = document.getElementById('btnEnableNotifications');
-    if (btn) {
-      btn.textContent = '✓ Notifications Enabled';
-      btn.style.background = '#28a745';
-      btn.disabled = true;
+    // If not granted, create a visible enable button for user to click
+    if (notificationPermission !== 'granted') {
+        forceNotificationPermission();
+    } else {
+        // update UI if you have a button
+        const btn = document.getElementById('btnEnableNotifications');
+        if (btn) {
+            btn.textContent = '✓ Notifications Enabled';
+            btn.style.background = '#28a745';
+            btn.disabled = true;
+        }
+        console.log('[Notification] Permission already granted at init.');
     }
-    console.log('[Notification] Permission already granted at init.');
-  }
 }
 
 /************************************************************************
  * Simple placeholder functions used above - replace with your app functions
  ************************************************************************/
 function addNotification(title, message, isAlert, time) {
-  // Your in-app UI notification insertion logic here
-  console.log('[addNotification] ', title, message, isAlert, time);
+    // Your in-app UI notification insertion logic here
+    console.log('[addNotification] ', title, message, isAlert, time);
 }
 
 window.addEventListener('click', async function handleFirstClick() {
-  if (Notification.permission === 'default') {
-    console.log('[AutoPermission] Requesting permission after first user gesture...');
-    await requestNotificationPermission();
-  }
-  window.removeEventListener('click', handleFirstClick);
+    if (Notification.permission === 'default') {
+        console.log('[AutoPermission] Requesting permission after first user gesture...');
+        await requestNotificationPermission();
+    }
+    window.removeEventListener('click', handleFirstClick);
 });
 
 
@@ -1149,7 +1262,7 @@ async function fetchNewEvents() {
     setStatus("Fetching events...");
     const cacheKey = "cachedEarthquakes";
     const cacheTimeKey = "cachedEarthquakesTime";
-    const fbFeedUrl = "https://rss.app/feeds/U6XZP9zYYmVM8EiP.xml";
+    const fbFeedUrl = "https://earthquakeapi.forestparty223.workers.dev/api/earthquakes";
 
     try {
         let url;
@@ -1172,7 +1285,7 @@ async function fetchNewEvents() {
         }
 
         // ✅ Fetch from the selected source
-        const resp = await fetch(url + `?t=${Date.now()}`, { cache: "no-store" });
+        const resp = await fetch(url + (url.includes("?") ? "&" : "?") + `t=${Date.now()}`, { cache: "no-store" });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const json = await resp.json();
 
@@ -1249,17 +1362,23 @@ async function fetchNewEvents() {
         // ✅ Sort newest first
         events.sort((a, b) => new Date(b.time) - new Date(a.time));
 
-        // 🧭 Latest quake
-        const latest = events[0];
 
-        // Add markers for all quakes, animate/sound only newest
-        events.forEach(ev => addOrUpdateEventMarker(ev, ev.id === latest.id, ev.id === latest.id));
+        const latest = events[0];
+        const isNewQuake = latestEarthquakeId !== latest.id;
+
+        // Animate/sound only if new quake detected
+        events.forEach(ev => addOrUpdateEventMarker(
+            ev,
+            ev.id === latest.id && isNewQuake,
+            ev.id === latest.id && isNewQuake
+        ));
+
+        latestEarthquakeId = latest.id;
 
         // ✅ Cache successful result
         localStorage.setItem(cacheKey, JSON.stringify(events));
         localStorage.setItem(cacheTimeKey, Date.now().toString());
 
-        latestEarthquakeId = latest.id;
         setStatus(`Fetched ${events.length} events — latest: ${latest.location} (M${latest.magnitude})`);
 
     } catch (e) {
