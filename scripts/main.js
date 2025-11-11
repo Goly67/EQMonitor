@@ -400,60 +400,51 @@ function bootWindyAndStart() {
 
   // windyInit is provided by libBoot.js; runs async after Leaflet is present
   window.windyInit(options, async function (windyAPI) {
-    try {
-      const map = windyAPI.map; // This is a Leaflet L.Map instance [web:18][web:1]
+    const map = windyAPI.map; // Leaflet L.Map from Windy
+    // Optionally try switching to 'rain' only if available
+    safeSetOverlay(windyAPI, 'rain');
 
-      // Load overlays after map exists
-      await loadFaultLines(map);
-
-      // Call your earthquake renderer; ensure it accepts (map)
-      if (typeof renderEarthquakes === 'function') {
-        await renderEarthquakes(map);
-      }
-
-      // Example: allow switching overlays later
-      // windyAPI.store.set('overlay', 'wind'); // wind, rain, radar, satellite, temp, etc. [web:6]
-
-    } catch (err) {
-      // This block also catches authorization failures that prevent Windy from initializing
-      console.error('Windy initialization failed:', err);
-      showCustomAlert('Windy failed to initialize. Check your API key and allowed domains.');
+    // Everything that needs 'map' must happen after this point
+    await loadFaultLines(map);
+    if (typeof renderEarthquakes === 'function') {
+      await renderEarthquakes(map); // ensure your function accepts (map)
     }
+
+    // If you need to change overlays from UI later:
+    // document.getElementById('yourOverlaySelect').onchange = e => safeSetOverlay(windyAPI, e.target.value);
   });
 }
 
-// Load fault lines and add to the provided map
+// Switch overlay only if available to avoid "Invalid value for overlay"
+function safeSetOverlay(windyAPI, overlayName) {
+  try {
+    const { store } = windyAPI;
+    // Optional: probe what overlays are available from store; if not exposed, wrap in try/catch
+    store.set('overlay', overlayName);
+  } catch (e) {
+    console.warn('Overlay not available, staying on default:', overlayName, e);
+  }
+}
+
+// Fault lines loader now requires map param and runs only after Windy is ready
 async function loadFaultLines(map) {
   try {
-    // Active faults
-    const response1 = await fetch('https://raw.githubusercontent.com/Goly67/EQMonitor/main/scripts/gem_active_faults.geojson', { cache: 'no-store' });
-    if (!response1.ok) throw new Error(`Faults fetch failed: ${response1.status}`);
-    const data1 = await response1.json();
-
+    const resp1 = await fetch('https://raw.githubusercontent.com/Goly67/EQMonitor/main/scripts/gem_active_faults.geojson', { cache: 'no-store' });
+    if (!resp1.ok) throw new Error(`Faults fetch failed: ${resp1.status}`);
+    const data1 = await resp1.json();
     if (faultLinesLayer) faultLinesLayer.remove();
     faultLinesLayer = L.geoJSON(data1, {
       filter: isInPhilippines,
-      style: {
-        color: 'red',
-        weight: 1.5,
-        opacity: 0.5
-      }
+      style: { color: 'red', weight: 1.5, opacity: 0.5 }
     }).addTo(map);
 
-    // Harmonized faults
-    const response2 = await fetch('https://raw.githubusercontent.com/Goly67/EQMonitor/main/scripts/gem_active_faults_harmonized.geojson', { cache: 'no-store' });
-    if (!response2.ok) throw new Error(`Harmonized fetch failed: ${response2.status}`);
-    const data2 = await response2.json();
-
+    const resp2 = await fetch('https://raw.githubusercontent.com/Goly67/EQMonitor/main/scripts/gem_active_faults_harmonized.geojson', { cache: 'no-store' });
+    if (!resp2.ok) throw new Error(`Harmonized fetch failed: ${resp2.status}`);
+    const data2 = await resp2.json();
     if (harmonizedFaultLinesLayer) harmonizedFaultLinesLayer.remove();
     harmonizedFaultLinesLayer = L.geoJSON(data2, {
       filter: isInPhilippines,
-      style: {
-        color: 'blue',
-        weight: 1,
-        opacity: 0.4,
-        dashArray: '5, 5'
-      }
+      style: { color: 'blue', weight: 1, opacity: 0.4, dashArray: '5, 5' }
     }).addTo(map);
 
     console.log('Philippine fault and trench lines loaded successfully.');
