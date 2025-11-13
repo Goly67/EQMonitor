@@ -283,42 +283,25 @@ unlockBtn?.addEventListener("click", unlockAudio);
 
 // 🔊 Play sound
 function playQuakeSound(isNearby = false, magnitude = 0) {
-    if (!audioUnlocked) {
-        console.warn("Audio locked, skipping quake sound.");
-        return;
-    }
-
-    console.log("[playQuakeSound] Playing sound (isNearby:", isNearby, "mag:", magnitude, ")");
-
-    let sound;
-    if (magnitude >= 5.0) {
-        sound = alarmSound;
-    } else if (isNearby) {
-        sound = quakeNearby;
-    } else {
-        sound = quakeSound;
-    }
-
-    sound.currentTime = 0;
-    sound.play().catch(err => console.warn("Audio play failed:", err));
-}
-
-function playQuakeSound(isNearby = false, magnitude = 0) {
     if (!audioUnlocked) return;
 
-    let sound;
-    if (magnitude >= 4.5) {
-        sound = alarmSound;
-    } else if (isNearby) {
-        sound = quakeNearby;
-    } else {
-        sound = quakeSound;
-    }
+    let baseSound;
+    if (magnitude >= 5.0) baseSound = alarmSound;
+    else if (isNearby) baseSound = quakeNearby;
+    else baseSound = quakeSound;
 
-    const clone = sound.cloneNode();
+    const clone = baseSound.cloneNode();
+    clone.volume = currentMasterVolume;
     clone.play().catch(err => console.warn("Audio play failed:", err));
-}
 
+    // Track active sound
+    activeSounds.push(clone);
+
+    // Remove from active list once done
+    clone.addEventListener("ended", () => {
+        activeSounds = activeSounds.filter(s => s !== clone);
+    });
+}
 /************************************************************************
  * CONFIG
  ************************************************************************/
@@ -367,27 +350,54 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 map.on("zoomend", updateCircleScaleByZoom);
 
-/************************************************************************
-* MASTER VOLUME CONTROL (affects all quake sounds)
-************************************************************************/
+/***********************************************************************
+* MASTER VOLUME CONTROL (FIXED - WORKING VERSION)
+***********************************************************************/
+
+// Global variable to store current master volume
+let currentMasterVolume = parseFloat(localStorage.getItem("quakeMasterVolume")) || 0.8;
+
+// Get the slider element
 const masterVolumeSlider = document.getElementById("masterVolume");
-const savedMasterVolume = parseFloat(localStorage.getItem("quakeMasterVolume"));
+masterVolumeSlider.value = currentMasterVolume;
 
-// Set initial volume (default 0.8)
-const masterVolume = !isNaN(savedMasterVolume) ? savedMasterVolume : 0.8;
-quakeSound.volume = masterVolume;
-quakeNearby.volume = masterVolume;
-alarmSound.volume = masterVolume;
-masterVolumeSlider.value = masterVolume;
+// Apply saved volume to all base audio elements immediately
+quakeSound.volume = currentMasterVolume;
+quakeNearby.volume = currentMasterVolume;
+alarmSound.volume = currentMasterVolume;
 
-// Update all volumes when slider changes
+let activeSounds = [];
+
+// Real-time volume update
 masterVolumeSlider.addEventListener("input", (e) => {
-    const v = parseFloat(e.target.value);
-    quakeSound.volume = v;
-    quakeNearby.volume = v;
-    alarmSound.volume = v;
-    localStorage.setItem("quakeMasterVolume", v);
+    const newVolume = parseFloat(e.target.value);
+    currentMasterVolume = newVolume;
+    localStorage.setItem("quakeMasterVolume", newVolume);
+
+    // Update ALL currently playing sounds
+    activeSounds.forEach(sound => sound.volume = newVolume);
 });
+
+function playQuakeSound(isNearby = false, magnitude = 0) {
+    if (!audioUnlocked) return;
+
+    let baseSound;
+    if (magnitude >= 5.0) baseSound = alarmSound;
+    else if (isNearby) baseSound = quakeNearby;
+    else baseSound = quakeSound;
+
+    const clone = baseSound.cloneNode();
+    clone.volume = currentMasterVolume;
+    clone.play().catch(err => console.warn("Audio play failed:", err));
+
+    // Track active sound
+    activeSounds.push(clone);
+
+    // Remove from active list once done
+    clone.addEventListener("ended", () => {
+        activeSounds = activeSounds.filter(s => s !== clone);
+    });
+}
 
 /************************************************************************
 * REAL PHIVOLCS SHAKEMAP LAYER (auto-clears & loads latest)
