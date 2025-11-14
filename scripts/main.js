@@ -185,61 +185,121 @@ window.addEventListener('resize', function () {
     }
 });
 
-/* Notification system */
+// NOTIFICATION SYSTEM - FINAL WORKING VERSION
 const notificationBell = document.getElementById('notificationBell');
 const notificationPanel = document.getElementById('notificationPanel');
 const notificationPanelClose = document.getElementById('notificationPanelClose');
 const notificationPanelContent = document.getElementById('notificationPanelContent');
 const notificationBadge = document.getElementById('notificationBadge');
+
 let notifications = [];
 
-notificationBell.addEventListener('click', () => {
-    notificationPanel.classList.toggle('active');
-});
+// NEW - WORKING VERSION:
+function addNotification(title, message, isAlert = false, time = null, link = null) {
+    console.log('[addNotification] Creating notification:', { title, message, isAlert, time, link});
 
-notificationPanelClose.addEventListener('click', () => {
-    notificationPanel.classList.remove('active');
-});
+    // Create notification object
+const notification = {
+    id: Date.now() + Math.random(),
+    title: title || 'Notification',
+    message: message || 'No message',
+    isAlert: isAlert || false,
+    time: time || new Date().toLocaleTimeString(),
+    link: link
+};
 
-// Close notification panel when clicking outside
-document.addEventListener('click', (e) => {
-    if (!notificationPanel.contains(e.target) && !notificationBell.contains(e.target)) {
-        notificationPanel.classList.remove('active');
-    }
-});
+    console.log('[addNotification] Notification object:', notification);
 
-function addNotification(title, message, isAlert = false, time = null) {
-    const notification = {
-        id: Date.now(),
-        title,
-        message,
-        isAlert,
-        time: time || new Date().toLocaleTimeString()
-    };
-
+    // Add to array (newest first)
     notifications.unshift(notification);
-    if (notifications.length > 10) notifications.pop();
+    console.log('[addNotification] Total notifications now:', notifications.length);
 
+    // Keep max 10
+    if (notifications.length > 10) {
+        notifications.pop();
+    }
+
+    // IMPORTANT: Update the UI
+    console.log('[addNotification] Calling updateNotificationUI...');
     updateNotificationUI();
+    console.log('[addNotification] Done!');
 }
+
+// ===== MAKE SURE updateNotificationUI IS ALSO CORRECT =====
 
 function updateNotificationUI() {
+    console.log('[updateNotificationUI] Rendering', notifications.length, 'notifications');
+
+    if (!notificationPanelContent) {
+        console.error('[updateNotificationUI] ERROR: notificationPanelContent is NULL!');
+        return;
+    }
+
+    // If empty, show message
     if (notifications.length === 0) {
+        console.log('[updateNotificationUI] No notifications, showing empty message');
         notificationPanelContent.innerHTML = '<div class="notification-panel-empty">No notifications yet</div>';
-        notificationBadge.style.display = 'none';
-    } else {
+        if (notificationBadge) {
+            notificationBadge.style.display = 'none';
+        }
+        return;
+    }
+
+    // Update badge
+    if (notificationBadge) {
         notificationBadge.textContent = notifications.length;
         notificationBadge.style.display = 'flex';
-
-        notificationPanelContent.innerHTML = notifications.map(notif => `
-          <div class="notification-item ${notif.isAlert ? 'alert' : ''}">
-            <div class="notification-item-title">${notif.title}</div>
-            <div>${notif.message}</div>
-            <div class="notification-item-time">${notif.time}</div>
-          </div>
-        `).join('');
+        console.log('[updateNotificationUI] Badge updated to:', notifications.length);
     }
+
+    let html = '';
+notifications.forEach((notif, idx) => {
+    console.log('[updateNotificationUI] Rendering notification', idx + 1, ':', notif.title);
+
+    html += `
+      <div class="notification-item ${notif.isAlert ? 'alert' : ''}">
+        <div class="notification-item-title">${notif.title}</div>
+        <div>${notif.message}</div>
+        <div class="notification-item-time">${notif.time}</div>
+
+        ${notif.link ? `
+            <div class="notification-item-link">
+                <a href="${notif.link}" target="_blank" style="color:#4aa3ff; text-decoration:underline;">
+                    View Earthquake Details
+                </a>
+            </div>
+        ` : ''}
+      </div>
+    `;
+});
+    notificationPanelContent.innerHTML = html;
+    console.log('[updateNotificationUI] Successfully rendered all notifications');
 }
+
+// ===== NOTIFICATION PANEL CONTROLS =====
+if (notificationBell) {
+    notificationBell.addEventListener('click', () => {
+        if (!notificationPanel.classList.contains('active')) {
+            notificationPanel.style.display = 'block';
+            notificationPanel.classList.add('active');
+        } else {
+            notificationPanel.classList.remove('active');
+            notificationPanel.classList.add('closing');
+
+            notificationPanel.addEventListener('animationend', () => {
+                notificationPanel.classList.remove('closing');
+                notificationPanel.style.display = 'none';
+            }, { once: true });
+        }
+    });
+}
+
+// ===== INITIALIZE ON PAGE LOAD =====
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('[Notification] System initialized');
+    notifications = [];
+    updateNotificationUI();
+});
 
 /************************************************************************
  * FIXED SINGLE AUDIO SYSTEM
@@ -754,7 +814,7 @@ function showNotification(ev, marker) {
         const title = `Magnitude ${ev.magnitude} Earthquake`;
         const message = `${ev.location} (${ev.depth} km depth)`;
 
-        addNotification(title, message, isAlert, formatDateTime(ev.time));
+        addNotification(title, message, isAlert, formatDateTime(ev.time), ev.link);
 
         // Send desktop push notification if this is a new earthquake
         // Check both currentNotificationId and lastNotifiedEarthquakeId to avoid duplicates
@@ -820,7 +880,7 @@ function showNotification(ev, marker) {
         const title = `Magnitude ${ev.magnitude} Earthquake`;
         const message = `${ev.location} (${ev.depth ?? '?'} km depth)`;
 
-        addNotification(title, message, isAlert, formatDateTime(ev.time));
+        addNotification(title, message, isAlert, formatDateTime(ev.time), ev.link);
     }
 
     // Only send desktop/system notification if it's a different quake than last notified
@@ -1112,10 +1172,6 @@ async function initNotificationSystem() {
 /************************************************************************
  * Simple placeholder functions used above - replace with your app functions
  ************************************************************************/
-function addNotification(title, message, isAlert, time) {
-    // Your in-app UI notification insertion logic here
-    console.log('[addNotification] ', title, message, isAlert, time);
-}
 
 window.addEventListener('click', async function handleFirstClick() {
     if (Notification.permission === 'default') {
@@ -1854,7 +1910,7 @@ function initLocationButton() {
       bottom: 0;
       left: 0;
       right: 0;
-      background: linear-gradient(90deg, #151d3b 0%, #4e0707 100%);
+      background: linear-gradient(90deg,  rgba(41, 150, 161, 1) 0%, rgba(19, 52, 59, 1)  100%);
       border-top: 2px solid #ffffff70;
       color: #e2e8f0;
       z-index: 3000;
@@ -1884,7 +1940,7 @@ function initLocationButton() {
     }
     #enableLocationBtn {
       flex-shrink: 0;
-      background: #882121ff;
+      background: rgba(20, 68, 78, 1);
       color: #ffffffff;
       border: none;
       padding: 10px 18px;
@@ -1896,7 +1952,7 @@ function initLocationButton() {
     }
     #enableLocationBtn:active {
       transform: scale(0.97);
-      background: #ae2c2cff;
+      background: rgba(57, 133, 150, 1);
     }
 
     /* RESPONSIVE STYLES */
@@ -2108,6 +2164,8 @@ window.addEventListener("resize", () => {
 
 })();
 
+console.log('[Init] Notifications array initialized');
+
 // Hook 1: when fetchNewEvents succeeds
 const _origFetchNewEvents = fetchNewEvents;
 fetchNewEvents = async function () {
@@ -2119,6 +2177,12 @@ fetchNewEvents = async function () {
 if (typeof eventSource !== "undefined") {
     eventSource.addEventListener("message", (event) => markUpdate());
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    notifications = [];
+    updateNotificationUI();
+    console.log('[Notification System] Initialized');
+});
 
 // Watchdog: check every minute if data stalled for 5+ minutes
 setInterval(() => {
