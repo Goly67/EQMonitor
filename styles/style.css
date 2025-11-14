@@ -993,7 +993,7 @@ body {
     height: var(--space-10);
     background: var(--color-success);
     border-radius: var(--radius-full);
-    animation: pulse var(--duration-normal) infinite;
+    animation: pulse 0.8s infinite;
     box-shadow: 0 0 var(--space-8) rgba(var(--color-success-rgb), 0.8);
 }
 
