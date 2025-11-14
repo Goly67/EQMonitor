@@ -196,17 +196,17 @@ let notifications = [];
 
 // NEW - WORKING VERSION:
 function addNotification(title, message, isAlert = false, time = null, link = null) {
-    console.log('[addNotification] Creating notification:', { title, message, isAlert, time, link});
+    console.log('[addNotification] Creating notification:', { title, message, isAlert, time, link });
 
     // Create notification object
-const notification = {
-    id: Date.now() + Math.random(),
-    title: title || 'Notification',
-    message: message || 'No message',
-    isAlert: isAlert || false,
-    time: time || new Date().toLocaleTimeString(),
-    link: link
-};
+    const notification = {
+        id: Date.now() + Math.random(),
+        title: title || 'Notification',
+        message: message || 'No message',
+        isAlert: isAlert || false,
+        time: time || new Date().toLocaleTimeString(),
+        link: link
+    };
 
     console.log('[addNotification] Notification object:', notification);
 
@@ -253,10 +253,10 @@ function updateNotificationUI() {
     }
 
     let html = '';
-notifications.forEach((notif, idx) => {
-    console.log('[updateNotificationUI] Rendering notification', idx + 1, ':', notif.title);
+    notifications.forEach((notif, idx) => {
+        console.log('[updateNotificationUI] Rendering notification', idx + 1, ':', notif.title);
 
-    html += `
+        html += `
       <div class="notification-item ${notif.isAlert ? 'alert' : ''}">
         <div class="notification-item-title">${notif.title}</div>
         <div>${notif.message}</div>
@@ -271,7 +271,7 @@ notifications.forEach((notif, idx) => {
         ` : ''}
       </div>
     `;
-});
+    });
     notificationPanelContent.innerHTML = html;
     console.log('[updateNotificationUI] Successfully rendered all notifications');
 }
@@ -1910,9 +1910,9 @@ function initLocationButton() {
       bottom: 0;
       left: 0;
       right: 0;
-      background: linear-gradient(90deg,  rgba(41, 150, 161, 1) 0%, rgba(19, 52, 59, 1)  100%);
+      background: linear-gradient(90deg, var(--color-background) 0%, rgba(var(--color-teal-800-rgb, 41, 150, 161), 0.95) 100%);
       border-top: 2px solid #ffffff70;
-      color: #e2e8f0;
+      color: var(--color-text);
       z-index: 3000;
       display: flex;
       justify-content: center;
@@ -1936,7 +1936,7 @@ function initLocationButton() {
       font-weight: 500;
       font-size: 0.9rem;
       line-height: 1.4;
-      color: #ffffffff;
+      color: var(--color-text);
     }
     #enableLocationBtn {
       flex-shrink: 0;
@@ -2112,13 +2112,13 @@ legend.onAdd = function (map) {
     const maxHeight = isMobile ? "30vh" : "auto"; // slightly shorter
     const maxWidth = isMobile ? "45vw" : "220px";
 
-    div.style.background = "rgba(255, 255, 255, 0.85)";
+    div.style.background = "var(--color-surface)";
     div.style.padding = padding;
     div.style.borderRadius = "8px";
     div.style.boxShadow = "0 0 15px rgba(0,0,0,0.2)";
     div.style.fontSize = fontSize;
     div.style.lineHeight = "1.4";
-    div.style.color = "#ffffffff";
+    div.style.color = "var(--color-text)";
     div.style.maxWidth = maxWidth;
     div.style.maxHeight = maxHeight;
     div.style.overflowY = "auto"; // always allow scrolling if needed

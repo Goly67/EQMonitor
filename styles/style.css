@@ -112,7 +112,7 @@
     /* Spacing */
     --space-0: 0;
     --space-1: 1px;
-    --space-2: 2px;
+    --space-2: 3px;
     --space-4: 4px;
     --space-6: 6px;
     --space-8: 8px;
@@ -839,19 +839,34 @@ body {
 
 /* Slide in from right */
 @keyframes slideInRight {
-    0% { transform: translateX(100%); opacity: 0; }
-    100% { transform: translateX(0); opacity: 1; }
+    0% {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    100% {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
 /* Slide out to right */
 @keyframes slideOutRight {
-    0% { transform: translateX(0); opacity: 1; }
-    100% { transform: translateX(100%); opacity: 0; }
+    0% {
+        transform: translateX(0);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateX(100%);
+        opacity: 0;
+    }
 }
 
 .notification-panel {
     display: none;
-    position: fixed; /* or absolute depending on your layout */
+    position: fixed;
+    /* or absolute depending on your layout */
     top: 0;
     right: 0;
     /* width, height, background, etc. */
@@ -1068,7 +1083,7 @@ body {
 }
 
 .burger-menu-btn.active .burger-line:nth-child(3) {
-    transform: rotate(-45deg) translate(var(--space-2), calc(var(--space-8) * -1));
+    transform: rotate(-45deg) translate(var(--space-2), calc(var(--space-8) * -0.8));
 }
 
 /* ===== NOTIFICATION PANEL ===== */
