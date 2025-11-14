@@ -282,6 +282,7 @@ if (notificationBell) {
         if (!notificationPanel.classList.contains('active')) {
             notificationPanel.style.display = 'block';
             notificationPanel.classList.add('active');
+
         } else {
             notificationPanel.classList.remove('active');
             notificationPanel.classList.add('closing');
@@ -291,6 +292,19 @@ if (notificationBell) {
                 notificationPanel.style.display = 'none';
             }, { once: true });
         }
+    });
+}
+
+if (notificationPanelClose) {
+    notificationPanelClose.addEventListener('click', () => {
+        // Close the panel
+        notificationPanel.classList.remove('active');
+        notificationPanel.classList.add('closing');
+
+        notificationPanel.addEventListener('animationend', () => {
+            notificationPanel.classList.remove('closing');
+            notificationPanel.style.display = 'none';
+        }, { once: true });
     });
 }
 
@@ -2188,8 +2202,8 @@ document.addEventListener('DOMContentLoaded', () => {
 setInterval(() => {
     const minutesSinceLastUpdate = (Date.now() - lastUpdateTime) / 60000;
     if (minutesSinceLastUpdate > 5) {
-        console.warn("⚠️ No new earthquake updates for 5 minutes. Reloading page...");
-        window.location.reload();
+        console.warn("⚠️ No new earthquake updates for 5 minutes. Attempting to refetch...");
+        fetchNewEvents(); // Just refetch data instead of reloading entire page
     }
 
 }, 60000);
