@@ -192,6 +192,21 @@ const notificationPanelClose = document.getElementById('notificationPanelClose')
 const notificationPanelContent = document.getElementById('notificationPanelContent');
 const notificationBadge = document.getElementById('notificationBadge');
 
+// Presence tracking UI
+const presenceBtn = document.getElementById("presenceBtn");
+const presencePanel = document.getElementById("presencePanel");
+const presencePanelClose = document.getElementById("presencePanelClose");
+const presencePanelContent = document.getElementById("presencePanelContent");
+const presenceCountEl = document.getElementById("presenceCount");
+
+// Unique viewer id persisted per browser
+let viewerId = localStorage.getItem("eqm_viewer_id");
+if (!viewerId) {
+  viewerId = `viewer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  localStorage.setItem("eqm_viewer_id", viewerId);
+}
+
+
 let notifications = [];
 
 // NEW - WORKING VERSION:
@@ -277,10 +292,35 @@ function updateNotificationUI() {
 }
 
 // ===== NOTIFICATION PANEL CONTROLS =====
+
+function forceClosePresencePanel() {
+    if (!presencePanel.classList.contains("active")) return;
+
+    presencePanel.classList.remove("active");
+    presencePanel.classList.add("closing");
+
+    presencePanel.addEventListener(
+        "animationend",
+        () => {
+            presencePanel.style.display = "none";
+            presencePanel.classList.remove("closing");
+        },
+        { once: true }
+    );
+}
+
+// ===== NOTIFICATION PANEL CONTROLS =====
 if (notificationBell) {
-    notificationBell.addEventListener('click', () => {
+    notificationBell.addEventListener('click', (e) => {
+        e.stopPropagation();
+
+        // Close presence panel if it is open
+        forceClosePresencePanel();
+
         if (!notificationPanel.classList.contains('active')) {
             notificationPanel.style.display = 'block';
+            notificationPanel.classList.remove("closing");
+            void notificationPanel.offsetWidth;
             notificationPanel.classList.add('active');
 
         } else {
@@ -295,18 +335,6 @@ if (notificationBell) {
     });
 }
 
-if (notificationPanelClose) {
-    notificationPanelClose.addEventListener('click', () => {
-        // Close the panel
-        notificationPanel.classList.remove('active');
-        notificationPanel.classList.add('closing');
-
-        notificationPanel.addEventListener('animationend', () => {
-            notificationPanel.classList.remove('closing');
-            notificationPanel.style.display = 'none';
-        }, { once: true });
-    });
-}
 
 // ===== INITIALIZE ON PAGE LOAD =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -1156,6 +1184,261 @@ async function sendBrowserNotification(ev, title, message, isAlert) {
         }
     }
 }
+
+// ===== PRESENCE TRACKING (viewers online) =====
+
+let presenceSessionRef = null;
+let presenceAllRef = null;
+let presenceHeartbeat = null;
+
+/**
+ * Render the presence list into the panel and update the count button.
+ */
+function formatPresenceRelativeTime(pastMs) {
+  const now = Date.now();
+  const diffMs = now - pastMs;
+  const diffMins = Math.max(1, Math.round(diffMs / 60000));
+
+  if (diffMins < 60) {
+    return diffMins === 1 ? "1 minute" : `${diffMins} minutes`;
+  }
+
+  const diffHours = Math.round(diffMins / 60);
+  if (diffHours < 24) {
+    return diffHours === 1 ? "1 hour" : `${diffHours} hours`;
+  }
+
+  const diffDays = Math.round(diffHours / 24);
+  return diffDays === 1 ? "1 day" : `${diffDays} days`;
+}
+
+/**
+ * Render the presence list into the panel and update the count button.
+ */
+function renderPresence(sessions) {
+  const entries = Object.entries(sessions || {});
+  if (!presenceCountEl || !presencePanelContent) return;
+
+  // Count ALL online viewers (not just the top 10)
+  const onlineCount = entries.filter(([, s]) => s.status === "online").length;
+  presenceCountEl.textContent = onlineCount.toString();
+
+  if (!entries.length) {
+    presencePanelContent.innerHTML =
+      '<div class="presence-panel-empty">No one else is viewing right now.</div>';
+    return;
+  }
+
+  // Sort by most recently seen
+  entries.sort(([, a], [, b]) => {
+    const aTime = a.lastSeen || a.firstSeen || 0;
+    const bTime = b.lastSeen || b.firstSeen || 0;
+    return bTime - aTime;
+  });
+
+  // Only keep the latest 10 sessions
+  const limitedEntries = entries.slice(0, 10);
+
+  const now = Date.now();
+  let html = "";
+
+  for (const [id, s] of limitedEntries) {
+    const isSelf = id === viewerId;
+
+    const firstSeenMs = s.firstSeen || s.lastSeen || now;
+    const lastSeenMs = s.lastSeen || s.firstSeen || now;
+
+    const viewedAtText = formatDateTime(new Date(firstSeenMs).toISOString());
+    const lastSeenText = formatDateTime(new Date(lastSeenMs).toISOString());
+
+    const isOnline = s.status === "online";
+
+    let titleLine;
+    let statusLine;
+
+    if (isOnline) {
+      // Online viewers
+      titleLine = isSelf
+        ? "You viewed the website!"
+        : "A user viewed the website!";
+      statusLine = `Status: Online now <br> Viewing since ${viewedAtText} <br>`;
+    } else {
+      // Offline viewers: X minutes/hours/days ago
+      const ago = formatPresenceRelativeTime(lastSeenMs);
+      titleLine = isSelf
+        ? `You viewed the website ${ago} ago.`
+        : `A user viewed the website ${ago} ago.`;
+      statusLine = `Status: Offline <br> Last seen on ${lastSeenText}`;
+    }
+
+    html += `
+      <div class="presence-item ${isSelf ? "self" : ""}">
+        <div>${titleLine}</div>
+        <div class="presence-item-status">
+          ${statusLine}
+        </div>
+      </div>
+    `;
+  }
+
+  presencePanelContent.innerHTML = html;
+}
+
+/**
+ * Initialize Firebase presence tracking.
+ */
+function initPresenceTracking() {
+  if (typeof firebase === "undefined" || !firebase.database) {
+    console.warn("Firebase not available; presence tracking disabled.");
+    return;
+  }
+
+  const db = firebase.database();
+
+  // Session record for this viewer
+  presenceSessionRef = db.ref("sessions/" + viewerId);
+  const now = Date.now();
+
+  // Set initial session data
+  presenceSessionRef
+    .set({
+      firstSeen: now,
+      lastSeen: now,
+      status: "online"
+    })
+    .catch((err) => console.warn("Presence set error:", err));
+
+  // Ensure status switches to offline on disconnect
+  presenceSessionRef
+    .onDisconnect()
+    .update({
+      lastSeen: firebase.database.ServerValue.TIMESTAMP,
+      status: "offline"
+    })
+    .catch(() => {});
+
+  // Heartbeat to keep lastSeen fresh while the tab is open
+  presenceHeartbeat = setInterval(() => {
+    presenceSessionRef
+      .update({
+        lastSeen: Date.now(),
+        status: "online"
+      })
+      .catch(() => {});
+  }, 20000); // 20s
+
+  // Listen to all sessions to update UI in real time
+  presenceAllRef = db.ref("sessions");
+  presenceAllRef.on("value", (snap) => {
+    renderPresence(snap.val() || {});
+  });
+
+  // Mark offline on visibility change if needed (extra safety)
+  document.addEventListener("visibilitychange", () => {
+    if (!presenceSessionRef) return;
+    if (document.hidden) {
+      presenceSessionRef
+        .update({
+          lastSeen: Date.now(),
+          status: "offline"
+        })
+        .catch(() => {});
+    } else {
+      presenceSessionRef
+        .update({
+          lastSeen: Date.now(),
+          status: "online"
+        })
+        .catch(() => {});
+    }
+  });
+}
+
+// ===== CLEAN PRESENCE PANEL SYSTEM =====
+
+// Prevent missing elements
+if (!presenceBtn || !presencePanel || !presencePanelClose) {
+    console.error("Presence panel elements missing.");
+}
+
+// OPEN / CLOSE helper
+function openPresencePanel() {
+    presencePanel.style.display = "flex";
+
+    // Restart animation cleanly
+    presencePanel.classList.remove("closing");
+    void presencePanel.offsetWidth; // force reflow
+
+    presencePanel.classList.add("active");
+}
+
+function closePresencePanel() {
+    if (!presencePanel.classList.contains("active")) return;
+
+    // Start closing animation
+    presencePanel.classList.remove("active");
+    presencePanel.classList.add("closing");
+
+    // Wait for animation to finish before hiding
+    const onAnimationEnd = () => {
+        presencePanel.style.display = "none";
+        presencePanel.classList.remove("closing");
+        presencePanel.removeEventListener("animationend", onAnimationEnd);
+    };
+
+    presencePanel.addEventListener("animationend", onAnimationEnd);
+}
+
+// ===== TOGGLE when clicking the presence button =====
+function forceCloseNotificationPanel() {
+    if (!notificationPanel.classList.contains("active")) return;
+
+    notificationPanel.classList.remove("active");
+    notificationPanel.classList.add("closing");
+
+    const onNotifAnimEnd = () => {
+        notificationPanel.style.display = "none";
+        notificationPanel.classList.remove("closing");
+        notificationPanel.removeEventListener("animationend", onNotifAnimEnd);
+    };
+
+    notificationPanel.addEventListener("animationend", onNotifAnimEnd);
+}
+
+presenceBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+
+    // Close notifications if open
+    forceCloseNotificationPanel();
+
+    if (!presencePanel.classList.contains("active")) {
+        openPresencePanel();
+    } else {
+        closePresencePanel();
+    }
+});
+
+// ===== Close when clicking X =====
+presencePanelClose.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closePresencePanel();
+});
+
+// ===== Prevent clicks inside the panel from closing it =====
+presencePanel.addEventListener("click", (e) => {
+    e.stopPropagation();
+});
+
+// ===== Close when clicking outside =====
+document.addEventListener("click", (e) => {
+    const clickedOutside =
+        !presencePanel.contains(e.target) &&
+        !presenceBtn.contains(e.target);
+
+    if (presencePanel.classList.contains("active") && clickedOutside) {
+        closePresencePanel();
+    }
+});
 
 /************************************************************************
  * Initialization - run on page load
@@ -2170,6 +2453,7 @@ window.addEventListener("resize", () => {
     limitMarkers();
     initLocationButton();
     initNotificationSystem(); // Initialize push notifications
+    initPresenceTracking();
     fetchNewEvents(); // initial load
 
     // No SSE — just use regular polling

@@ -8,6 +8,8 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+
   <!-- HTML Audio Elements -->
   <audio id="quakeSound" src="quakeFarNew.mp3" preload="auto"></audio>
   <audio id="quakeNearbySound" src="quakeClose.mp3" preload="auto"></audio>
@@ -30,6 +32,11 @@
         🔔
         <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
       </button>
+      <!-- NEW: Live viewers button -->
+      <button class="presence-btn" id="presenceBtn" title="Who is viewing now?">
+        <span class="presence-dot material-symbols-outlined">visibility</span>
+        <span class="presence-count" id="presenceCount">0</span>
+      </button>
     </div>
   </div>
 
@@ -39,11 +46,22 @@
   <!-- Notification panel -->
   <div id="notificationPanel" class="notification-panel">
     <div class="notification-panel-header">
-        <h6>Earthquake Alerts</h6>
-        <button id="notificationPanelClose" class="notification-panel-close">&times;</button>
+      <h6>Earthquake Alerts</h6>
+      <button id="notificationPanelClose" class="notification-panel-close">&times;</button>
     </div>
     <div id="notificationPanelContent" class="notification-panel-content">
-        <div class="notification-panel-empty">No notifications yet</div>
+      <div class="notification-panel-empty">No notifications yet</div>
+    </div>
+  </div>
+
+  <!-- NEW: Presence panel -->
+<div id="presencePanel" class="presence-panel">
+    <div class="presence-panel-header">
+        <h6>Live Viewers</h6>
+        <button id="presencePanelClose" class="presence-panel-close">&times;</button>
+    </div>
+    <div id="presencePanelContent" class="presence-panel-content">
+        <div class="presence-panel-empty">No one else is viewing right now.</div>
     </div>
 </div>
   <!-- Map -->
@@ -101,6 +119,23 @@
 
   <script src="https://unpkg.com/esri-leaflet@3.0.10/dist/esri-leaflet.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script>
+  const firebaseConfig = {
+  apiKey: "AIzaSyCFZo7v9sZcN9M7xomcJStaLgBqO47cDLQ",
+  authDomain: "presenceapi-f7bf9.firebaseapp.com",
+  projectId: "presenceapi-f7bf9",
+  storageBucket: "presenceapi-f7bf9.firebasestorage.app",
+  messagingSenderId: "452138178068",
+  appId: "1:452138178068:web:8f8cc78265822a082fb901",
+  measurementId: "G-SZLDP9DD84",
+  databaseURL: "https://presenceapi-f7bf9-default-rtdb.asia-southeast1.firebasedatabase.app"
+};
+
+firebase.initializeApp(firebaseConfig);
+  firebase.initializeApp(firebaseConfig);
+</script>
   <script src="https://unpkg.com/esri-leaflet@3.0.11/dist/esri-leaflet.js"></script>
   <script src="https://unpkg.com/esri-leaflet-renderers@3.0.6/dist/esri-leaflet-renderers.js"></script>
   <script src="scripts/main.js"></script>
