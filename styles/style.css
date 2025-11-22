@@ -547,7 +547,7 @@ select.form-control {
   cursor: pointer;
 
   /* Strong dark pill on light backgrounds */
-  background: rgba(var(--color-slate-900-rgb), 0.80);
+  background: rgb(152, 216, 225);
   color: var(--color-cream-50);
   border-radius: 999px;
   border: 1px solid rgba(var(--color-slate-900-rgb), 0.95);
@@ -564,7 +564,7 @@ select.form-control {
 }
 
 .presence-btn:hover {
-  background: rgba(var(--color-slate-900-rgb), 0.95);
+  background: rgb(152, 216, 225);
   transform: translateY(-1px);
   box-shadow: 0 var(--space-4) var(--space-12)
     rgba(var(--color-slate-900-rgb), 0.7);
@@ -661,7 +661,7 @@ select.form-control {
   margin: 0;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
-  color: var(--color-primary);
+  color: var(--color-text-primary);
   text-transform: uppercase;
   letter-spacing: var(--letter-spacing-tight);
   font-family: var(--font-family-mono);
@@ -699,7 +699,7 @@ select.form-control {
   padding: var(--space-12);
   margin-bottom: var(--space-8);
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   box-shadow: 0 1px 4px rgba(33,128,141,0.06);
   line-height: var(--line-height-normal);
   transition: box-shadow var(--duration-normal) var(--ease-standard);
@@ -733,7 +733,7 @@ select.form-control {
 .presence-item-status {
   font-size: var(--font-size-xs);
   margin-top: var(--space-4);
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   font-family: var(--font-family-base);
   opacity: 0.85;
 }
