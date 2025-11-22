@@ -147,9 +147,6 @@ function showCustomAlert(message) {
     document.getElementById("alertOkBtn").onclick = () => alertBox.remove();
 }
 
-/* window.addEventListener("load", () => {
-    showCustomAlert("Custom alert system active and running!");
-}); */
 
 // Burger menu toggle
 burgerMenuBtn.addEventListener('click', function () {
@@ -199,13 +196,24 @@ const presencePanelClose = document.getElementById("presencePanelClose");
 const presencePanelContent = document.getElementById("presencePanelContent");
 const presenceCountEl = document.getElementById("presenceCount");
 
-// Unique viewer id persisted per browser
-let viewerId = localStorage.getItem("eqm_viewer_id");
-if (!viewerId) {
-  viewerId = `viewer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  localStorage.setItem("eqm_viewer_id", viewerId);
-}
+const sessionsRef = firebase.database().ref("sessions");
+sessionsRef.once("value", snap => {
+    const sessions = snap.val() || {};
+    const cutoff = Date.now() - 5 * 60 * 1000; // 5 minutes old
 
+    for (const [id, s] of Object.entries(sessions)) {
+        if (s.status === "offline" && s.lastSeen < cutoff) {
+            sessionsRef.child(id).remove();
+        }
+    }
+});
+
+// Unique viewer id persisted per browser
+let viewerId = localStorage.getItem("viewerId");
+if (!viewerId) {
+    viewerId = crypto.randomUUID();
+    localStorage.setItem("viewerId", viewerId);
+}
 
 let notifications = [];
 
