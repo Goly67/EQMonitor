@@ -1219,7 +1219,9 @@ function renderPresence(sessions) {
   const entries = Object.entries(sessions || {});
   if (!presenceCountEl || !presencePanelContent) return;
 
-  // Count ALL online viewers (not just the top 10)
+  const now = Date.now();
+
+  // Count all online viewers
   const onlineCount = entries.filter(([, s]) => s.status === "online").length;
   presenceCountEl.textContent = onlineCount.toString();
 
@@ -1229,20 +1231,36 @@ function renderPresence(sessions) {
     return;
   }
 
-  // Sort by most recently seen
-  entries.sort(([, a], [, b]) => {
-    const aTime = a.lastSeen || a.firstSeen || 0;
-    const bTime = b.lastSeen || b.firstSeen || 0;
+  // Separate self, others online, and offline
+  const selfEntry = entries.find(([id]) => id === viewerId);
+  const otherEntries = entries.filter(([id]) => id !== viewerId);
+
+  const onlineUsers = otherEntries.filter(([, s]) => s.status === "online");
+  const offlineUsers = otherEntries.filter(([, s]) => s.status !== "online");
+
+  // Sort online: newest first
+  onlineUsers.sort(([, a], [, b]) => {
+    const aTime = a.firstSeen || 0;
+    const bTime = b.firstSeen || 0;
     return bTime - aTime;
   });
 
-  // Only keep the latest 10 sessions
-  const limitedEntries = entries.slice(0, 10);
+  // Sort offline: newest first
+  offlineUsers.sort(([, a], [, b]) => {
+    const aTime = a.lastSeen || 0;
+    const bTime = b.lastSeen || 0;
+    return bTime - aTime;
+  });
 
-  const now = Date.now();
+  // Combine final list: self at top, then others online, then offline
+  const sortedEntries = [];
+  if (selfEntry) sortedEntries.push(selfEntry); // self first
+  sortedEntries.push(...onlineUsers);
+  sortedEntries.push(...offlineUsers);
+
   let html = "";
 
-  for (const [id, s] of limitedEntries) {
+  for (const [id, s] of sortedEntries) {
     const isSelf = id === viewerId;
 
     const firstSeenMs = s.firstSeen || s.lastSeen || now;
@@ -1256,18 +1274,15 @@ function renderPresence(sessions) {
     let titleLine;
     let statusLine;
 
-    if (isOnline) {
-      // Online viewers
-      titleLine = isSelf
-        ? "You viewed the website!"
-        : "A user viewed the website!";
+    if (isSelf) {
+      titleLine = "You viewed the website!";
+      statusLine = `Status: Online now <br> Viewing since ${viewedAtText} <br>`;
+    } else if (isOnline) {
+      titleLine = `A user viewed the website!`;
       statusLine = `Status: Online now <br> Viewing since ${viewedAtText} <br>`;
     } else {
-      // Offline viewers: X minutes/hours/days ago
       const ago = formatPresenceRelativeTime(lastSeenMs);
-      titleLine = isSelf
-        ? `You viewed the website ${ago} ago.`
-        : `A user viewed the website ${ago} ago.`;
+      titleLine = `A user viewed the website ${ago} ago.`;
       statusLine = `Status: Offline <br> Last seen on ${lastSeenText}`;
     }
 
@@ -1283,6 +1298,7 @@ function renderPresence(sessions) {
 
   presencePanelContent.innerHTML = html;
 }
+
 
 /**
  * Initialize Firebase presence tracking.
