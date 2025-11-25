@@ -196,16 +196,31 @@ const presencePanelClose = document.getElementById("presencePanelClose");
 const presencePanelContent = document.getElementById("presencePanelContent");
 const presenceCountEl = document.getElementById("presenceCount");
 
-const sessionsRef = firebase.database().ref("sessions");
-sessionsRef.once("value", snap => {
-    const sessions = snap.val() || {};
-    const cutoff = Date.now() - 5 * 60 * 1000; // 5 minutes old
+const sessionsRef = firebase.database().ref("sessions"); // count liv
+sessionsRef.on("value", snap => {
+const sessions = snap.val() || {};
+const now = Date.now();
+const cutoff = now - 5 * 60 * 1000; // 5 minutes
 
-    for (const [id, s] of Object.entries(sessions)) {
-        if (s.status === "offline" && s.lastSeen < cutoff) {
-            sessionsRef.child(id).remove();
-        }
+    let activeCount = 0;
+
+for (const [id, s] of Object.entries(sessions)) {
+    const lastSeen = s.lastSeen || 0;
+
+    // Remove very old sessions
+    if (lastSeen < cutoff) {
+        sessionsRef.child(id).remove();
+        continue;
     }
+
+    // Only count recent sessions as active viewers
+    activeCount++;
+}
+    
+if (presenceCountEl) {
+    presenceCountEl.textContent = activeCount;
+}
+    
 });
 
 // Unique viewer id persisted per browser
