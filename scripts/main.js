@@ -2483,6 +2483,87 @@ window.addEventListener("resize", () => {
     legend.addTo(map);
 });
 
+function isMobileOrApple() {
+  return true;
+}
+
+window.addEventListener("click", async function handleFirstClick() {
+  if (Notification.permission === "default") {
+    await requestNotificationPermission();
+  }
+  window.removeEventListener("click", handleFirstClick);
+});
+
+let deferredPrompt = null;
+
+function initPWAInstallCard() {
+  const card = document.getElementById("pwaInstallCard");
+  const installBtn = document.getElementById("pwaInstallBtn");
+  const laterBtn = document.getElementById("pwaInstallLater");
+
+  if (!card || !installBtn || !laterBtn) return;
+
+  // 1. Force-show on mobile
+  const isMobile = window.matchMedia("(max-width: 768px)").matches;
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+
+  if (isMobile && !isStandalone) {
+    card.style.display = "flex";
+    installBtn.textContent = "Checking compatibility...";
+    installBtn.disabled = true;
+
+    // FIX: Don't wait forever. If browser is silent (iOS/Simulator), enable button anyway.
+    setTimeout(() => {
+      if (!deferredPrompt) {
+        installBtn.disabled = false;
+        installBtn.textContent = "Install App"; 
+      }
+    }, 2000); // Wait 2 seconds max
+  }
+
+  // 2. Listen for "Real" Install Prompt (Android/Chrome)
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    card.style.display = "flex";
+    installBtn.disabled = false;
+    installBtn.textContent = "Install App";
+  });
+
+  // 3. Handle Click
+  installBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+
+    // If we have the native prompt (Android/Desktop Chrome)
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        card.style.display = 'none';
+      }
+      deferredPrompt = null;
+      return;
+    }
+
+    // If NO prompt (iOS or Simulator), show manual instructions
+    showCustomAlert(
+      "To install this app:\n\n" +
+      "📱 iOS (Safari): Tap 'Share' button → 'Add to Home Screen'\n"
+    );
+  });
+
+  laterBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    card.style.display = "none";
+  });
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js')
+    .then(reg => console.log('SW Registered!', reg))
+    .catch(err => console.error('SW Failed:', err));
+}
+
 
 /************************************************************************
  * INIT
@@ -2518,6 +2599,7 @@ if (typeof eventSource !== "undefined") {
 document.addEventListener('DOMContentLoaded', () => {
     notifications = [];
     updateNotificationUI();
+    initPWAInstallCard();  // ADD THIS LINE - runs after DOM is ready
     console.log('[Notification System] Initialized');
 });
 
