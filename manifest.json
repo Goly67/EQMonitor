@@ -3,7 +3,7 @@
   "short_name": "EQMonitor",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#121212",
+  "background_color": "#13343B",
   "theme_color": "#298ea1",
   "icons": [
     {
