@@ -198,29 +198,29 @@ const presenceCountEl = document.getElementById("presenceCount");
 
 const sessionsRef = firebase.database().ref("sessions"); // count liv
 sessionsRef.on("value", snap => {
-    const sessions = snap.val() || {};
-    const now = Date.now();
-    const cutoff = now - 5 * 60 * 1000; // 5 minutes
+const sessions = snap.val() || {};
+const now = Date.now();
+const cutoff = now - 5 * 60 * 1000; // 5 minutes
 
     let activeCount = 0;
 
-    for (const [id, s] of Object.entries(sessions)) {
-        const lastSeen = s.lastSeen || 0;
+for (const [id, s] of Object.entries(sessions)) {
+    const lastSeen = s.lastSeen || 0;
 
-        // Remove very old sessions
-        if (lastSeen < cutoff) {
-            sessionsRef.child(id).remove();
-            continue;
-        }
-
-        // Only count recent sessions as active viewers
-        activeCount++;
+    // Remove very old sessions
+    if (lastSeen < cutoff) {
+        sessionsRef.child(id).remove();
+        continue;
     }
 
-    if (presenceCountEl) {
-        presenceCountEl.textContent = activeCount;
-    }
-
+    // Only count recent sessions as active viewers
+    activeCount++;
+}
+    
+if (presenceCountEl) {
+    presenceCountEl.textContent = activeCount;
+}
+    
 });
 
 // Unique viewer id persisted per browser
@@ -1107,79 +1107,104 @@ async function sendBrowserNotification(ev, title, message, isAlert) {
         return;
     }
 
-    if (Notification.permission !== 'granted') {
-        console.warn('[Notification] Permission not granted.');
+    // Always check actual permission
+    const currentPermission = Notification.permission;
+    if (currentPermission !== 'granted') {
+        console.warn('[Notification] Permission not granted:', currentPermission);
         return;
     }
+    notificationPermission = 'granted';
 
-    // ---- helpers ----
     function shortenLocation(loc) {
-        if (!loc) return 'Unknown area';
-        let s = loc.replace(/\s+/g, ' ').trim();
+        if (!loc) return 'Unknown location';
 
-        if (s.toLowerCase().includes(' of ')) {
-            s = s.split(/\s+of\s+/i).pop().trim();
+        let shortLoc = loc.replace(/\s+/g, ' ').trim();
+
+        if (shortLoc.toLowerCase().includes(' of ')) {
+            shortLoc = shortLoc.split(/\s+of\s+/i).pop().trim();
         }
 
-        if (s.length > 30) s = s.slice(0, 27) + '…';
-        return s;
+        // Clean up any tabs or newlines
+        shortLoc = shortLoc.replace(/\n|\t/g, ' ').trim();
+
+        // Limit to prevent super long names
+        if (shortLoc.length > 90) shortLoc = shortLoc.slice(0, 87) + '...';
+
+        return shortLoc || 'Unknown location';
     }
 
-    function shortTime(t) {
-        try {
-            return new Date(t).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        } catch {
-            return '';
-        }
-    }
 
-    // ---- build SHORT text-only body ----
-    const mag = ev.magnitude != null ? `M${ev.magnitude}` : 'M?';
-    const loc = shortenLocation(ev.location);
-    const time = shortTime(ev.time);
+    const shortLocation = shortenLocation(ev.location);
 
-    let distance = '';
+    // Distance text
+    let distanceText = '';
     if (userLocation && ev.lat != null && ev.lon != null) {
-        const d = Math.round(
-            getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon)
-        );
-        if (d <= 100) distance = `⚠ ${d}km`;
-        else distance = `${d}km`;
+        const d = Math.round(getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon));
+        distanceText = d <= 100 ? `⚠️ NEARBY - ${d} km away` : `${d} km away`;
     }
 
-    // Final body (keep under ~60 chars)
-    const bodyParts = [mag, loc, distance, time].filter(Boolean);
-    const body = bodyParts.join(' • ');
+    const bodyParts = [
+        `${ev.depth ?? '?'} km depth`,
+        shortLocation,
+        distanceText || null,
+        `Time: ${formatDateTime(ev.time)}`
+    ].filter(Boolean);
 
-    // ---- MINIMAL notification options ----
-    const options = {
-        body: body,
-        tag: `eq-${ev.id}`,
-        renotify: false,
-        requireInteraction: !!isAlert
-        // 🚫 no data
-        // 🚫 no icon
-        // 🚫 no badge
-        // 🚫 no vibrate
-        // 🚫 no actions
+    const notificationBody = bodyParts.join('\n');
+
+    // Icon path: adjust if your icon is located elsewhere
+    const iconPath = 'https://raw.githubusercontent.com/Goly67/EQMonitor/main/logo.png';
+
+    const notificationOptions = {
+        body: notificationBody,
+        icon: iconPath,
+        badge: iconPath,
+        tag: `earthquake-${ev.id}`,
+        requireInteraction: !!isAlert,
+        vibrate: isAlert ? [200, 100, 200, 100, 200] : [200, 100, 200],
+        data: {
+            url: window.location.href,
+            earthquakeId: ev.id,
+            magnitude: ev.magnitude,
+            location: ev.location
+        }
     };
 
     try {
-        const n = new Notification(title, options);
+        // Primary: direct Notification API (works for desktop)
+        const n = new Notification(title, notificationOptions);
+        console.log('[Notification] Created via Notification constructor:', n);
+        n.onclick = (evt) => {
+            evt.preventDefault();
+            window.focus();
+            try { n.close(); } catch { }
+        };
+        n.onshow = () => console.log('[Notification] displayed');
+        n.onerror = (err) => console.error('[Notification] error', err);
+
+        // Keep reference to avoid immediate GC in some browsers
         window._lastNotification = n;
 
+        // Auto-close non-alerts
         if (!isAlert) {
             setTimeout(() => {
-                try { n.close(); } catch {}
-            }, 8000);
+                try { n.close(); } catch (e) { }
+            }, 10000);
         }
 
-        console.log('[Notification] Sent (Halofit-safe):', body);
     } catch (err) {
-        console.error('[Notification] Failed:', err);
+        console.error('[Notification] Constructor failed, trying service worker fallback:', err);
+        // Fallback - show via service worker registration if available
+        try {
+            if (serviceWorkerRegistration && typeof serviceWorkerRegistration.showNotification === 'function') {
+                await serviceWorkerRegistration.showNotification(title, notificationOptions);
+                console.log('[Notification] Shown via service worker.');
+            } else {
+                console.warn('[Notification] No active service worker registration for fallback.');
+            }
+        } catch (swErr) {
+            console.error('[Notification] ServiceWorker fallback failed:', swErr);
+        }
     }
 }
 
@@ -1193,98 +1218,98 @@ let presenceHeartbeat = null;
  * Render the presence list into the panel and update the count button.
  */
 function formatPresenceRelativeTime(pastMs) {
-    const now = Date.now();
-    const diffMs = now - pastMs;
-    const diffMins = Math.max(1, Math.round(diffMs / 60000));
+  const now = Date.now();
+  const diffMs = now - pastMs;
+  const diffMins = Math.max(1, Math.round(diffMs / 60000));
 
-    if (diffMins < 60) {
-        return diffMins === 1 ? "1 minute" : `${diffMins} minutes`;
-    }
+  if (diffMins < 60) {
+    return diffMins === 1 ? "1 minute" : `${diffMins} minutes`;
+  }
 
-    const diffHours = Math.round(diffMins / 60);
-    if (diffHours < 24) {
-        return diffHours === 1 ? "1 hour" : `${diffHours} hours`;
-    }
+  const diffHours = Math.round(diffMins / 60);
+  if (diffHours < 24) {
+    return diffHours === 1 ? "1 hour" : `${diffHours} hours`;
+  }
 
-    const diffDays = Math.round(diffHours / 24);
-    return diffDays === 1 ? "1 day" : `${diffDays} days`;
+  const diffDays = Math.round(diffHours / 24);
+  return diffDays === 1 ? "1 day" : `${diffDays} days`;
 }
 
 /**
  * Render the presence list into the panel and update the count button.
  */
 function renderPresence(sessions) {
-    const entries = Object.entries(sessions || {});
-    if (!presenceCountEl || !presencePanelContent) return;
+  const entries = Object.entries(sessions || {});
+  if (!presenceCountEl || !presencePanelContent) return;
 
-    const now = Date.now();
+  const now = Date.now();
 
-    // Count all online viewers
-    const onlineCount = entries.filter(([, s]) => s.status === "online").length;
-    presenceCountEl.textContent = onlineCount.toString();
+  // Count all online viewers
+  const onlineCount = entries.filter(([, s]) => s.status === "online").length;
+  presenceCountEl.textContent = onlineCount.toString();
 
-    if (!entries.length) {
-        presencePanelContent.innerHTML =
-            '<div class="presence-panel-empty">No one else is viewing right now.</div>';
-        return;
+  if (!entries.length) {
+    presencePanelContent.innerHTML =
+      '<div class="presence-panel-empty">No one else is viewing right now.</div>';
+    return;
+  }
+
+  // Separate self, others online, and offline
+  const selfEntry = entries.find(([id]) => id === viewerId);
+  const otherEntries = entries.filter(([id]) => id !== viewerId);
+
+  const onlineUsers = otherEntries.filter(([, s]) => s.status === "online");
+  const offlineUsers = otherEntries.filter(([, s]) => s.status !== "online");
+
+  // Sort online: newest first
+  onlineUsers.sort(([, a], [, b]) => {
+    const aTime = a.firstSeen || 0;
+    const bTime = b.firstSeen || 0;
+    return bTime - aTime;
+  });
+
+  // Sort offline: newest first
+  offlineUsers.sort(([, a], [, b]) => {
+    const aTime = a.lastSeen || 0;
+    const bTime = b.lastSeen || 0;
+    return bTime - aTime;
+  });
+
+  // Combine final list: self at top, then others online, then offline
+  const sortedEntries = [];
+  if (selfEntry) sortedEntries.push(selfEntry); // self first
+  sortedEntries.push(...onlineUsers);
+  sortedEntries.push(...offlineUsers);
+
+  let html = "";
+
+  for (const [id, s] of sortedEntries) {
+    const isSelf = id === viewerId;
+
+    const firstSeenMs = s.firstSeen || s.lastSeen || now;
+    const lastSeenMs = s.lastSeen || s.firstSeen || now;
+
+    const viewedAtText = formatDateTime(new Date(firstSeenMs).toISOString());
+    const lastSeenText = formatDateTime(new Date(lastSeenMs).toISOString());
+
+    const isOnline = s.status === "online";
+
+    let titleLine;
+    let statusLine;
+
+    if (isSelf) {
+      titleLine = "You viewed the website!";
+      statusLine = `Status: Online now <br> Viewing since ${viewedAtText} <br>`;
+    } else if (isOnline) {
+      titleLine = `A user viewed the website!`;
+      statusLine = `Status: Online now <br> Viewing since ${viewedAtText} <br>`;
+    } else {
+      const ago = formatPresenceRelativeTime(lastSeenMs);
+      titleLine = `A user viewed the website ${ago} ago.`;
+      statusLine = `Status: Offline <br> Last seen on ${lastSeenText}`;
     }
 
-    // Separate self, others online, and offline
-    const selfEntry = entries.find(([id]) => id === viewerId);
-    const otherEntries = entries.filter(([id]) => id !== viewerId);
-
-    const onlineUsers = otherEntries.filter(([, s]) => s.status === "online");
-    const offlineUsers = otherEntries.filter(([, s]) => s.status !== "online");
-
-    // Sort online: newest first
-    onlineUsers.sort(([, a], [, b]) => {
-        const aTime = a.firstSeen || 0;
-        const bTime = b.firstSeen || 0;
-        return bTime - aTime;
-    });
-
-    // Sort offline: newest first
-    offlineUsers.sort(([, a], [, b]) => {
-        const aTime = a.lastSeen || 0;
-        const bTime = b.lastSeen || 0;
-        return bTime - aTime;
-    });
-
-    // Combine final list: self at top, then others online, then offline
-    const sortedEntries = [];
-    if (selfEntry) sortedEntries.push(selfEntry); // self first
-    sortedEntries.push(...onlineUsers);
-    sortedEntries.push(...offlineUsers);
-
-    let html = "";
-
-    for (const [id, s] of sortedEntries) {
-        const isSelf = id === viewerId;
-
-        const firstSeenMs = s.firstSeen || s.lastSeen || now;
-        const lastSeenMs = s.lastSeen || s.firstSeen || now;
-
-        const viewedAtText = formatDateTime(new Date(firstSeenMs).toISOString());
-        const lastSeenText = formatDateTime(new Date(lastSeenMs).toISOString());
-
-        const isOnline = s.status === "online";
-
-        let titleLine;
-        let statusLine;
-
-        if (isSelf) {
-            titleLine = "You viewed the website!";
-            statusLine = `Status: Online now <br> Viewing since ${viewedAtText} <br>`;
-        } else if (isOnline) {
-            titleLine = `A user viewed the website!`;
-            statusLine = `Status: Online now <br> Viewing since ${viewedAtText} <br>`;
-        } else {
-            const ago = formatPresenceRelativeTime(lastSeenMs);
-            titleLine = `A user viewed the website ${ago} ago.`;
-            statusLine = `Status: Offline <br> Last seen on ${lastSeenText}`;
-        }
-
-        html += `
+    html += `
       <div class="presence-item ${isSelf ? "self" : ""}">
         <div>${titleLine}</div>
         <div class="presence-item-status">
@@ -1292,9 +1317,9 @@ function renderPresence(sessions) {
         </div>
       </div>
     `;
-    }
+  }
 
-    presencePanelContent.innerHTML = html;
+  presencePanelContent.innerHTML = html;
 }
 
 
@@ -1302,70 +1327,70 @@ function renderPresence(sessions) {
  * Initialize Firebase presence tracking.
  */
 function initPresenceTracking() {
-    if (typeof firebase === "undefined" || !firebase.database) {
-        console.warn("Firebase not available; presence tracking disabled.");
-        return;
-    }
+  if (typeof firebase === "undefined" || !firebase.database) {
+    console.warn("Firebase not available; presence tracking disabled.");
+    return;
+  }
 
-    const db = firebase.database();
+  const db = firebase.database();
 
-    // Session record for this viewer
-    presenceSessionRef = db.ref("sessions/" + viewerId);
-    const now = Date.now();
+  // Session record for this viewer
+  presenceSessionRef = db.ref("sessions/" + viewerId);
+  const now = Date.now();
 
-    // Set initial session data
+  // Set initial session data
+  presenceSessionRef
+    .set({
+      firstSeen: now,
+      lastSeen: now,
+      status: "online"
+    })
+    .catch((err) => console.warn("Presence set error:", err));
+
+  // Ensure status switches to offline on disconnect
+  presenceSessionRef
+    .onDisconnect()
+    .update({
+      lastSeen: firebase.database.ServerValue.TIMESTAMP,
+      status: "offline"
+    })
+    .catch(() => {});
+
+  // Heartbeat to keep lastSeen fresh while the tab is open
+  presenceHeartbeat = setInterval(() => {
     presenceSessionRef
-        .set({
-            firstSeen: now,
-            lastSeen: now,
-            status: "online"
-        })
-        .catch((err) => console.warn("Presence set error:", err));
+      .update({
+        lastSeen: Date.now(),
+        status: "online"
+      })
+      .catch(() => {});
+  }, 20000); // 20s
 
-    // Ensure status switches to offline on disconnect
-    presenceSessionRef
-        .onDisconnect()
+  // Listen to all sessions to update UI in real time
+  presenceAllRef = db.ref("sessions");
+  presenceAllRef.on("value", (snap) => {
+    renderPresence(snap.val() || {});
+  });
+
+  // Mark offline on visibility change if needed (extra safety)
+  document.addEventListener("visibilitychange", () => {
+    if (!presenceSessionRef) return;
+    if (document.hidden) {
+      presenceSessionRef
         .update({
-            lastSeen: firebase.database.ServerValue.TIMESTAMP,
-            status: "offline"
+          lastSeen: Date.now(),
+          status: "offline"
         })
-        .catch(() => { });
-
-    // Heartbeat to keep lastSeen fresh while the tab is open
-    presenceHeartbeat = setInterval(() => {
-        presenceSessionRef
-            .update({
-                lastSeen: Date.now(),
-                status: "online"
-            })
-            .catch(() => { });
-    }, 20000); // 20s
-
-    // Listen to all sessions to update UI in real time
-    presenceAllRef = db.ref("sessions");
-    presenceAllRef.on("value", (snap) => {
-        renderPresence(snap.val() || {});
-    });
-
-    // Mark offline on visibility change if needed (extra safety)
-    document.addEventListener("visibilitychange", () => {
-        if (!presenceSessionRef) return;
-        if (document.hidden) {
-            presenceSessionRef
-                .update({
-                    lastSeen: Date.now(),
-                    status: "offline"
-                })
-                .catch(() => { });
-        } else {
-            presenceSessionRef
-                .update({
-                    lastSeen: Date.now(),
-                    status: "online"
-                })
-                .catch(() => { });
-        }
-    });
+        .catch(() => {});
+    } else {
+      presenceSessionRef
+        .update({
+          lastSeen: Date.now(),
+          status: "online"
+        })
+        .catch(() => {});
+    }
+  });
 }
 
 // ===== CLEAN PRESENCE PANEL SYSTEM =====
@@ -2459,84 +2484,84 @@ window.addEventListener("resize", () => {
 });
 
 function isMobileOrApple() {
-    return true;
+  return true;
 }
 
 window.addEventListener("click", async function handleFirstClick() {
-    if (Notification.permission === "default") {
-        await requestNotificationPermission();
-    }
-    window.removeEventListener("click", handleFirstClick);
+  if (Notification.permission === "default") {
+    await requestNotificationPermission();
+  }
+  window.removeEventListener("click", handleFirstClick);
 });
 
 let deferredPrompt = null;
 
 function initPWAInstallCard() {
-    const card = document.getElementById("pwaInstallCard");
-    const installBtn = document.getElementById("pwaInstallBtn");
-    const laterBtn = document.getElementById("pwaInstallLater");
+  const card = document.getElementById("pwaInstallCard");
+  const installBtn = document.getElementById("pwaInstallBtn");
+  const laterBtn = document.getElementById("pwaInstallLater");
 
-    if (!card || !installBtn || !laterBtn) return;
+  if (!card || !installBtn || !laterBtn) return;
 
-    // 1. Force-show on mobile
-    const isMobile = window.matchMedia("(max-width: 768px)").matches;
-    const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+  // 1. Force-show on mobile
+  const isMobile = window.matchMedia("(max-width: 768px)").matches;
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
 
-    if (isMobile && !isStandalone) {
-        card.style.display = "flex";
-        installBtn.textContent = "Checking compatibility...";
-        installBtn.disabled = true;
+  if (isMobile && !isStandalone) {
+    card.style.display = "flex";
+    installBtn.textContent = "Checking compatibility...";
+    installBtn.disabled = true;
 
-        // FIX: Don't wait forever. If browser is silent (iOS/Simulator), enable button anyway.
-        setTimeout(() => {
-            if (!deferredPrompt) {
-                installBtn.disabled = false;
-                installBtn.textContent = "Install App";
-            }
-        }, 2000); // Wait 2 seconds max
+    // FIX: Don't wait forever. If browser is silent (iOS/Simulator), enable button anyway.
+    setTimeout(() => {
+      if (!deferredPrompt) {
+        installBtn.disabled = false;
+        installBtn.textContent = "Install App"; 
+      }
+    }, 2000); // Wait 2 seconds max
+  }
+
+  // 2. Listen for "Real" Install Prompt (Android/Chrome)
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    card.style.display = "flex";
+    installBtn.disabled = false;
+    installBtn.textContent = "Install App";
+  });
+
+  // 3. Handle Click
+  installBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+
+    // If we have the native prompt (Android/Desktop Chrome)
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        card.style.display = 'none';
+      }
+      deferredPrompt = null;
+      return;
     }
 
-    // 2. Listen for "Real" Install Prompt (Android/Chrome)
-    window.addEventListener("beforeinstallprompt", (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-        card.style.display = "flex";
-        installBtn.disabled = false;
-        installBtn.textContent = "Install App";
-    });
+    // If NO prompt (iOS or Simulator), show manual instructions
+    showCustomAlert(
+      "To install this app:\n\n" +
+      "📱 iOS (Safari): Tap 'Share' button → 'Add to Home Screen'\n"
+    );
+  });
 
-    // 3. Handle Click
-    installBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-
-        // If we have the native prompt (Android/Desktop Chrome)
-        if (deferredPrompt) {
-            deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') {
-                card.style.display = 'none';
-            }
-            deferredPrompt = null;
-            return;
-        }
-
-        // If NO prompt (iOS or Simulator), show manual instructions
-        showCustomAlert(
-            "To install this app:\n\n" +
-            "📱 iOS (Safari): Tap 'Share' button → 'Add to Home Screen'\n"
-        );
-    });
-
-    laterBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        card.style.display = "none";
-    });
+  laterBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    card.style.display = "none";
+  });
 }
 
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js')
-        .then(reg => console.log('SW Registered!', reg))
-        .catch(err => console.error('SW Failed:', err));
+  navigator.serviceWorker.register('./sw.js')
+    .then(reg => console.log('SW Registered!', reg))
+    .catch(err => console.error('SW Failed:', err));
 }
 
 
