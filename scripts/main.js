@@ -614,7 +614,7 @@ function starPoints(size, spikes = 5, innerRatio = 0.5) {
 function buildStarSvg(size, fillColor, strokeColor = '#8B0000') {
   const points = starPoints(size);
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-    <polygon points="${points}" stroke="${strokeColor}" stroke-width="2" fill="${fillColor}" fill-opacity="0.95"/>
+    <polygon points="${points}" stroke="${strokeColor}" stroke-width="1" fill="${fillColor}" fill-opacity="0.95"/>
   </svg>`;
 }
 
@@ -2461,52 +2461,83 @@ function addUserMarker() {
 const legend = L.control({ position: "topleft" });
 
 legend.onAdd = function (map) {
-    const div = L.DomUtil.create("div", "info legend");
-    const grades = [0, 3, 4, 5, 6, 7];
-    const colors = ["#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#BD0026", "#800026"];
+  const div = L.DomUtil.create("div", "info legend");
+  const grades = [0, 3, 4, 5, 6, 7];
+  const colors = ["#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#BD0026", "#800026"];
 
-    // Responsive sizing
-    const isMobile = window.innerWidth <= 768;
-    const fontSize = isMobile ? "0.7rem" : "0.85rem";
-    const iconSize = isMobile ? 14 : 18;
-    const padding = isMobile ? "6px 8px" : "8px 12px";
-    const maxHeight = isMobile ? "30vh" : "auto"; // slightly shorter
-    const maxWidth = isMobile ? "45vw" : "220px";
+  // Responsive sizing
+  const isMobile = window.innerWidth <= 768;
+  const fontSize = isMobile ? "0.98rem" : "1rem";
 
-    div.style.background = "var(--color-surface)";
-    div.style.padding = padding;
-    div.style.borderRadius = "8px";
-    div.style.boxShadow = "0 0 15px rgba(0,0,0,0.2)";
-    div.style.fontSize = fontSize;
-    div.style.lineHeight = "1.4";
-    div.style.color = "var(--color-text)";
-    div.style.maxWidth = maxWidth;
-    div.style.maxHeight = maxHeight;
-    div.style.overflowY = "auto"; // always allow scrolling if needed
-    div.style.marginBottom = isMobile ? "15px" : "0";
-    div.style.marginRight = isMobile ? "10px" : "0"; // push in from right edge
-    div.style.position = "relative"; // safer positioning
+  // ✅ Bigger icons on mobile
+  const iconSize = isMobile ? 17 : 18;
+  const starIconSize = isMobile ? iconSize + 4 : iconSize;
 
-    div.innerHTML = "<strong>Magnitude</strong><br>";
+  // Spacing
+  const rowGap = isMobile ? 7 : 5;
+  const headerGap = isMobile ? 10 : 6;
 
-    for (let i = 0; i < grades.length; i++) {
-        div.innerHTML +=
-            `<i style="background:${colors[i]}; width:${iconSize}px; height:${iconSize}px; display:inline-block; margin-right:8px; border-radius:50%;"></i>` +
-            `${grades[i]}${grades[i + 1] ? "&ndash;" + grades[i + 1] : "+"}<br>`;
-    }
+  const padding = isMobile ? "10px 12px" : "10px 14px";
+  const maxHeight = isMobile ? "30vh" : "auto";
+  const maxWidth = isMobile ? "55vw" : "220px";
 
-    // Star icon in legend (CSS clip-path star)
-    div.innerHTML += `<i style="background:#ff6666; width:${iconSize}px; height:${iconSize}px; display:inline-block; margin-right:8px; clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);"></i> Latest Earthquake`;
+  div.style.background = "var(--color-surface)";
+  div.style.padding = padding;
+  div.style.borderRadius = "8px";
+  div.style.boxShadow = "0 0 15px rgba(0,0,0,0.2)";
+  div.style.fontSize = fontSize;
+  div.style.lineHeight = "1.25";
+  div.style.color = "var(--color-text)";
+  div.style.maxWidth = maxWidth;
+  div.style.maxHeight = maxHeight;
+  div.style.overflowY = "auto";
+  div.style.marginBottom = isMobile ? "15px" : "0";
+  div.style.marginRight = isMobile ? "10px" : "0";
+  div.style.position = "relative";
 
-    return div;
+  div.innerHTML = `<div style="font-weight:700; margin-bottom:${headerGap}px;">Magnitude</div>`;
+
+  // Magnitude rows
+  for (let i = 0; i < grades.length; i++) {
+    div.innerHTML += `
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:${rowGap}px;">
+        <i style="
+          background:${colors[i]};
+          width:${iconSize}px;
+          height:${iconSize}px;
+          display:inline-block;
+          border-radius:50%;
+          flex:0 0 auto;
+        "></i>
+        <span style="line-height:1;">${grades[i]}${grades[i + 1] ? "&ndash;" + grades[i + 1] : "+"}</span>
+      </div>
+    `;
+  }
+
+  // Latest Earthquake row
+  div.innerHTML += `
+    <div style="display:flex; align-items:center; gap:10px; margin-top:${rowGap + 2}px;">
+      <i style="
+        background:#ff6666;
+        width:${starIconSize}px;
+        height:${starIconSize}px;
+        display:inline-block;
+        clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+        flex:0 0 auto;
+      "></i>
+      <span style="line-height:1;">Latest Earthquake</span>
+    </div>
+  `;
+
+  return div;
 };
 
 legend.addTo(map);
 
 // Update on resize to stay responsive
 window.addEventListener("resize", () => {
-    legend.remove();
-    legend.addTo(map);
+  legend.remove();
+  legend.addTo(map);
 });
 
 function isMobileOrApple() {
