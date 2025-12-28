@@ -2502,66 +2502,51 @@ function addUserMarker() {
 }
 
 // ==========================================
-// 📍 ROBUST LOCATION HANDLING (Final Fix)
-// =========================================
+// 📍 ON-DEMAND LOCATION HANDLING
+// ==========================================
 
-// 1. Core Logic: Decides whether to ask, fetch, or stay silent
-function checkAndRequestLocation() {
-    console.log("Location Logic: Starting check...");
-
-    // Get stored preferences
+// 1. Core Logic: Only asks if explicitly triggered by user
+function checkAndRequestLocation(isUserAction = false) {
     const locationStatus = localStorage.getItem('userLocationPreference');
-    const lastDeniedTime = localStorage.getItem('locationDeniedTimestamp');
-    const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-    const now = Date.now();
-
-    // CASE 1: User previously allowed it
+    
+    // If we already have permission, just get the location
     if (locationStatus === 'allowed') {
-        console.log("Location Logic: previously allowed. Fetching silently.");
         fetchUserLocation();
         return;
     }
 
-    // CASE 2: User clicked "Not Now" less than 1 week ago
-    if (locationStatus === 'denied_temporary') {
-        if (lastDeniedTime && (now - parseInt(lastDeniedTime) < ONE_WEEK_MS)) {
-            const daysLeft = 7 - ((now - parseInt(lastDeniedTime)) / (1000 * 60 * 60 * 24));
-            console.log(`Location Logic: Snoozed. ${daysLeft.toFixed(1)} days remaining. Suppressing prompt.`);
-            return; // STOP HERE. Do not show alert.
-        } else {
-            console.log("Location Logic: Snooze expired (1 week passed). Asking again.");
-        }
-    }
-
-    // CASE 3: First time or Snooze expired -> Show Alert
-    console.log("Location Logic: Showing permission dialog.");
-    askForLocationPermission();
+    // If this function was called by a USER CLICK (e.g., footer button)
+    if (isUserAction) {
+        askForLocationPermission();
+    } 
+    // Otherwise (page load), DO NOTHING. Silence is golden.
 }
 
 // 2. The UI Prompt
 function askForLocationPermission() {
     showCustomAlert(
-        "Enable location to see your position on the map relative to earthquakes.",
+        "Enable location to see your position on the map relative to earthquakes.", 
         
         // ON ALLOW
         function() {
-            console.log("Location Logic: User clicked ALLOW.");
             localStorage.setItem('userLocationPreference', 'allowed');
             fetchUserLocation();
+            hideFooterLocationButton(); // Hide the footer button if successful
         },
         
         // ON NOT NOW
         function() {
-            console.log("Location Logic: User clicked NOT NOW. Snoozing for 7 days.");
-            localStorage.setItem('userLocationPreference', 'denied_temporary');
-            localStorage.setItem('locationDeniedTimestamp', Date.now().toString());
+            console.log("User clicked NOT NOW.");
+            // We don't need to save a "denied" state anymore because
+            // we aren't auto-asking. The button just stays there.
         }
     );
 }
 
+// 3. The Fetcher
 function fetchUserLocation() {
     if (!navigator.geolocation) {
-        console.log("Location Logic: Geolocation not supported.");
+        showCustomAlert("Geolocation is not supported by your browser.");
         return;
     }
 
@@ -2570,7 +2555,7 @@ function fetchUserLocation() {
             const { latitude, longitude } = position.coords;
             userLocation = { lat: latitude, lng: longitude };
             
-            // Ensure status is saved
+            // Save success
             localStorage.setItem('userLocationPreference', 'allowed');
 
             if (userMarker) {
@@ -2586,62 +2571,39 @@ function fetchUserLocation() {
                 userMarker.bindPopup("Your Location").openPopup();
             }
             
+            // Success! Hide the button since we don't need it anymore
+            hideFooterLocationButton();
         },
         (error) => {
-            console.warn("Location Logic: Fetch failed or denied by browser.", error.message);
+            console.warn("Location access denied.", error.message);
+            showCustomAlert("Location access was denied. Please enable it in your browser settings.");
         },
         { enableHighAccuracy: true }
     );
 }
 
-// 4. Initialization (Ensure this runs ONLY ONCE)
-if (!window.hasInitializedLocationLogic) {
-    window.hasInitializedLocationLogic = true;
+// 4. Helper to hide the footer button
+function hideFooterLocationButton() {
+    // Looks for your footer button by ID or Class
+    const footerBtn = document.getElementById('enableLocationBtn'); 
+    if (footerBtn) footerBtn.style.display = 'none';
+}
+
+// 5. Initialize: Attach click listener, but DON'T auto-run
+document.addEventListener('DOMContentLoaded', () => {
+    const footerBtn = document.getElementById('enableLocationBtn');
     
-    // Wait for everything to load
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', checkAndRequestLocation);
-    } else {
-        checkAndRequestLocation();
-    }
-}
-
-function fetchUserLocation() {
-    if (!navigator.geolocation) {
-        console.log("Geolocation is not supported by this browser.");
-        return;
+    if (footerBtn) {
+        footerBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            checkAndRequestLocation(true); // true = "This is a user action!"
+        });
     }
 
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            // SUCCESS
-            const { latitude, longitude } = position.coords;
-            userLocation = { lat: latitude, lng: longitude };
-            localStorage.setItem('userLocationPreference', 'allowed');
-            
-            if (userMarker) {
-                userMarker.setLatLng([latitude, longitude]);
-            } else {
-                const pulsingIcon = L.divIcon({
-                    className: 'user-location-marker',
-                    html: '<div class="pulse-ring"></div><div class="user-dot"></div>',
-                    iconSize: [20, 20],
-                    iconAnchor: [10, 10]
-                });
-
-                userMarker = L.marker([latitude, longitude], { icon: pulsingIcon }).addTo(map);
-                userMarker.bindPopup("Your Location").openPopup();
-            }
-        },
-        (error) => {
-            // ERROR or DENIED
-            console.warn("Location access denied or failed:", error.message);
-            // Optional: Remember they denied it so we don't bug them again
-            // localStorage.setItem('userLocationPreference', 'denied'); 
-        },
-        { enableHighAccuracy: true }
-    );
-}
+    if (localStorage.getItem('userLocationPreference') === 'allowed') {
+        fetchUserLocation();
+    }
+});
 
 /************************************************************
  * LEGEND: Slide-hide + Toggle button + Confirm notif
