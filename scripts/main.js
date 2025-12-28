@@ -91,60 +91,111 @@ async function loadFaultLines() {
 // Call this function on page load or map ready (automatic, no toggle)
 loadFaultLines();
 
-function showCustomAlert(message) {
+// Updated Custom Alert with "Not Now" button
+function showCustomAlert(message, onConfirm, onCancel) {
     // remove existing alert if open
     const oldAlert = document.getElementById("customAlert");
     if (oldAlert) oldAlert.remove();
 
     const alertBox = document.createElement("div");
     alertBox.id = "customAlert";
-    alertBox.style.position = "fixed";
-    alertBox.style.top = 0;
-    alertBox.style.left = 0;
-    alertBox.style.width = "100vw";
-    alertBox.style.height = "100vh";
-    alertBox.style.background = "rgba(0,0,0,0.65)";
-    alertBox.style.display = "flex";
-    alertBox.style.alignItems = "center";
-    alertBox.style.justifyContent = "center";
-    alertBox.style.zIndex = "999999";
+    Object.assign(alertBox.style, {
+        position: "fixed",
+        top: "0",
+        left: "0",
+        width: "100vw",
+        height: "100vh",
+        background: "rgba(0,0,0,0.65)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: "999999"
+    });
 
     alertBox.innerHTML = `
     <div style="
-      background:#99221c;
-      padding:20px;
-      border-radius:14px;
-      max-width:350px;
-      width:90%;
-      font-family:system-ui;
-      text-align:center;
-      box-shadow:0 8px 20px rgba(0,0,0,0.25);
-      animation: pop .25s ease;
+      background: var(--color-surface, #fff); /* Use theme variable if available */
+      color: var(--color-text, #333);
+      padding: 24px;
+      border-radius: 16px;
+      max-width: 340px;
+      width: 85%;
+      font-family: var(--font-family-base, system-ui, sans-serif);
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+      animation: popAlert 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      border: 1px solid var(--color-border, #eee);
     ">
-      <div style="font-size:20px;font-weight:600;margin-bottom:8px;"><b>ALERT</b></div>
-      <div style="font-size:15px;margin-bottom:18px;">${message}</div>
-      <button id="alertOkBtn" style="
-        background:#0078ff;
-        border:none;
-        padding:10px 18px;
-        border-radius:10px;
-        color:white;
-        cursor:pointer;
-        font-size:15px;
-        width:100%;
-      ">Okay</button>
+      <div style="
+        font-size: 18px; 
+        font-weight: 700; 
+        margin-bottom: 12px;
+        color: var(--color-text, #333);
+      ">
+        Location Access
+      </div>
+      
+      <div style="
+        font-size: 15px; 
+        line-height: 1.5; 
+        margin-bottom: 24px; 
+        color: var(--color-text-secondary, #666);
+      ">
+        ${message}
+      </div>
+      
+      <div style="display: flex; gap: 12px;">
+        <button id="alertCancelBtn" style="
+          flex: 1;
+          background: transparent;
+          border: 1px solid var(--color-border, #ccc);
+          padding: 10px 16px;
+          border-radius: 10px;
+          color: var(--color-text-secondary, #666);
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 600;
+          transition: background 0.2s;
+        ">Not now</button>
+
+        <button id="alertOkBtn" style="
+          flex: 1;
+          background: var(--color-primary, #0078ff);
+          border: none;
+          padding: 10px 16px;
+          border-radius: 10px;
+          color: #fff;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 600;
+          box-shadow: 0 4px 12px rgba(0,120,255,0.3);
+        ">Allow</button>
+      </div>
     </div>
 
     <style>
-    @keyframes pop {
-      0% { transform:scale(.85); opacity:0; }
-      100% { transform:scale(1); opacity:1; }
+    @keyframes popAlert {
+      0% { transform: scale(0.9); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
     }
+    #alertCancelBtn:hover { background: rgba(0,0,0,0.05); }
+    #alertOkBtn:hover { filter: brightness(1.1); }
     </style>
   `;
 
     document.body.appendChild(alertBox);
-    document.getElementById("alertOkBtn").onclick = () => alertBox.remove();
+
+    // CONFIRM ACTION
+    document.getElementById("alertOkBtn").onclick = () => {
+        alertBox.remove();
+        if (onConfirm) onConfirm();
+    };
+
+    // CANCEL ACTION
+    document.getElementById("alertCancelBtn").onclick = () => {
+        alertBox.remove();
+        if (onCancel) onCancel();
+    };
 }
 
 
@@ -357,14 +408,6 @@ if (notificationBell) {
         }
     });
 }
-
-
-// ===== INITIALIZE ON PAGE LOAD =====
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('[Notification] System initialized');
-    notifications = [];
-    updateNotificationUI();
-});
 
 /************************************************************************
  * FIXED SINGLE AUDIO SYSTEM
@@ -2457,6 +2500,149 @@ function addUserMarker() {
 
     map.setView([userLocation.lat, userLocation.lon], 7);
 }
+
+// ==========================================
+// 📍 ROBUST LOCATION HANDLING (Final Fix)
+// =========================================
+
+// 1. Core Logic: Decides whether to ask, fetch, or stay silent
+function checkAndRequestLocation() {
+    console.log("Location Logic: Starting check...");
+
+    // Get stored preferences
+    const locationStatus = localStorage.getItem('userLocationPreference');
+    const lastDeniedTime = localStorage.getItem('locationDeniedTimestamp');
+    const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    // CASE 1: User previously allowed it
+    if (locationStatus === 'allowed') {
+        console.log("Location Logic: previously allowed. Fetching silently.");
+        fetchUserLocation();
+        return;
+    }
+
+    // CASE 2: User clicked "Not Now" less than 1 week ago
+    if (locationStatus === 'denied_temporary') {
+        if (lastDeniedTime && (now - parseInt(lastDeniedTime) < ONE_WEEK_MS)) {
+            const daysLeft = 7 - ((now - parseInt(lastDeniedTime)) / (1000 * 60 * 60 * 24));
+            console.log(`Location Logic: Snoozed. ${daysLeft.toFixed(1)} days remaining. Suppressing prompt.`);
+            return; // STOP HERE. Do not show alert.
+        } else {
+            console.log("Location Logic: Snooze expired (1 week passed). Asking again.");
+        }
+    }
+
+    // CASE 3: First time or Snooze expired -> Show Alert
+    console.log("Location Logic: Showing permission dialog.");
+    askForLocationPermission();
+}
+
+// 2. The UI Prompt
+function askForLocationPermission() {
+    showCustomAlert(
+        "Enable location to see your position on the map relative to earthquakes.",
+        
+        // ON ALLOW
+        function() {
+            console.log("Location Logic: User clicked ALLOW.");
+            localStorage.setItem('userLocationPreference', 'allowed');
+            fetchUserLocation();
+        },
+        
+        // ON NOT NOW
+        function() {
+            console.log("Location Logic: User clicked NOT NOW. Snoozing for 7 days.");
+            localStorage.setItem('userLocationPreference', 'denied_temporary');
+            localStorage.setItem('locationDeniedTimestamp', Date.now().toString());
+        }
+    );
+}
+
+function fetchUserLocation() {
+    if (!navigator.geolocation) {
+        console.log("Location Logic: Geolocation not supported.");
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const { latitude, longitude } = position.coords;
+            userLocation = { lat: latitude, lng: longitude };
+            
+            // Ensure status is saved
+            localStorage.setItem('userLocationPreference', 'allowed');
+
+            if (userMarker) {
+                userMarker.setLatLng([latitude, longitude]);
+            } else {
+                const pulsingIcon = L.divIcon({
+                    className: 'user-location-marker',
+                    html: '<div class="pulse-ring"></div><div class="user-dot"></div>',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                });
+                userMarker = L.marker([latitude, longitude], { icon: pulsingIcon }).addTo(map);
+                userMarker.bindPopup("Your Location").openPopup();
+            }
+            
+        },
+        (error) => {
+            console.warn("Location Logic: Fetch failed or denied by browser.", error.message);
+        },
+        { enableHighAccuracy: true }
+    );
+}
+
+// 4. Initialization (Ensure this runs ONLY ONCE)
+if (!window.hasInitializedLocationLogic) {
+    window.hasInitializedLocationLogic = true;
+    
+    // Wait for everything to load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkAndRequestLocation);
+    } else {
+        checkAndRequestLocation();
+    }
+}
+
+function fetchUserLocation() {
+    if (!navigator.geolocation) {
+        console.log("Geolocation is not supported by this browser.");
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            // SUCCESS
+            const { latitude, longitude } = position.coords;
+            userLocation = { lat: latitude, lng: longitude };
+            localStorage.setItem('userLocationPreference', 'allowed');
+            
+            if (userMarker) {
+                userMarker.setLatLng([latitude, longitude]);
+            } else {
+                const pulsingIcon = L.divIcon({
+                    className: 'user-location-marker',
+                    html: '<div class="pulse-ring"></div><div class="user-dot"></div>',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                });
+
+                userMarker = L.marker([latitude, longitude], { icon: pulsingIcon }).addTo(map);
+                userMarker.bindPopup("Your Location").openPopup();
+            }
+        },
+        (error) => {
+            // ERROR or DENIED
+            console.warn("Location access denied or failed:", error.message);
+            // Optional: Remember they denied it so we don't bug them again
+            // localStorage.setItem('userLocationPreference', 'denied'); 
+        },
+        { enableHighAccuracy: true }
+    );
+}
+
 /************************************************************
  * LEGEND: Slide-hide + Toggle button + Confirm notif
  ************************************************************/
@@ -2766,6 +2952,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateNotificationUI();
     initPWAInstallCard();  // ADD THIS LINE - runs after DOM is ready
     console.log('[Notification System] Initialized');
+    initMap();
+    checkAndRequestLocation();
 });
 
 // Watchdog: check every minute if data stalled for 5+ minutes
