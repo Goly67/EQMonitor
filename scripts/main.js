@@ -2457,20 +2457,97 @@ function addUserMarker() {
 
     map.setView([userLocation.lat, userLocation.lon], 7);
 }
-// Add Responsive Legend
+/************************************************************
+ * LEGEND: Slide-hide + Toggle button + Confirm notif
+ ************************************************************/
+
+// Storage key so the user's preference persists
+const LEGEND_COLLAPSE_KEY = "legendCollapsed_v1";
+
+// Inject styles once
+function injectLegendToggleStyles() {
+  if (document.getElementById("legendToggleStyles")) return;
+
+  const style = document.createElement("style");
+  style.id = "legendToggleStyles";
+  style.textContent = `
+    .legend-wrap {
+      position: relative;
+      overflow: visible !important;
+      transform: translateX(0);
+      transition: transform 220ms ease;
+      will-change: transform;
+    }
+
+    /* Slide left so only the button stays visible */
+    .legend-wrap.legend-collapsed {
+      transform: translateX(calc(-100% + 0px));
+    }
+
+    .legend-toggle-btn {
+      position: absolute;
+      top: 5px;
+      right: -42px;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      line-height: 1;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      user-select: none;
+    }
+
+    .legend-toggle-btn:active {
+      transform: scale(0.96);
+    }
+
+    @media (max-width: 768px) {
+      .legend-toggle-btn {
+        width: 40px;
+        height: 40px;
+        right: -44px;
+        border-radius: 12px;
+        font-size: 20px;
+      }
+      .legend-wrap.legend-collapsed {
+        transform: translateX(calc(-100% + 2px));
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+injectLegendToggleStyles();
+
+// Add Responsive Legend (WITH TOGGLE)
 const legend = L.control({ position: "topleft" });
 
 legend.onAdd = function (map) {
   const div = L.DomUtil.create("div", "info legend");
+  div.classList.add("legend-wrap");
+
+  // Prevent map dragging/zoom when interacting with legend
+  L.DomEvent.disableClickPropagation(div);
+  L.DomEvent.disableScrollPropagation(div);
+
   const grades = [0, 3, 4, 5, 6, 7];
   const colors = ["#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#BD0026", "#800026"];
 
   // Responsive sizing
   const isMobile = window.innerWidth <= 768;
-  const fontSize = isMobile ? "0.98rem" : "1rem";
+  const fontSize = isMobile ? "0.75rem" : "0.85rem";
 
-  // ✅ Bigger icons on mobile
-  const iconSize = isMobile ? 17 : 18;
+  // Icon sizes
+  const iconSize = isMobile ? 22 : 18;
   const starIconSize = isMobile ? iconSize + 4 : iconSize;
 
   // Spacing
@@ -2495,9 +2572,9 @@ legend.onAdd = function (map) {
   div.style.marginRight = isMobile ? "10px" : "0";
   div.style.position = "relative";
 
+  // Content
   div.innerHTML = `<div style="font-weight:700; margin-bottom:${headerGap}px;">Magnitude</div>`;
 
-  // Magnitude rows
   for (let i = 0; i < grades.length; i++) {
     div.innerHTML += `
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:${rowGap}px;">
@@ -2514,7 +2591,6 @@ legend.onAdd = function (map) {
     `;
   }
 
-  // Latest Earthquake row
   div.innerHTML += `
     <div style="display:flex; align-items:center; gap:10px; margin-top:${rowGap + 2}px;">
       <i style="
@@ -2529,12 +2605,44 @@ legend.onAdd = function (map) {
     </div>
   `;
 
+  // Toggle button
+  const toggleBtn = document.createElement("button");
+  toggleBtn.type = "button";
+  toggleBtn.className = "legend-toggle-btn";
+
+  function applyLegendState(collapsed) {
+    if (collapsed) {
+      div.classList.add("legend-collapsed");
+      toggleBtn.innerHTML = "›"; // show (slide right)
+      toggleBtn.title = "Show legend";
+    } else {
+      div.classList.remove("legend-collapsed");
+      toggleBtn.innerHTML = "‹"; // hide (slide left)
+      toggleBtn.title = "Hide legend";
+    }
+  }
+
+  const initialCollapsed = localStorage.getItem(LEGEND_COLLAPSE_KEY) === "1";
+  applyLegendState(initialCollapsed);
+
+  toggleBtn.addEventListener("click", (e) => {
+  L.DomEvent.stop(e);
+
+  const isCollapsedNow = div.classList.contains("legend-collapsed");
+  const nextCollapsed = !isCollapsedNow;
+
+  localStorage.setItem(LEGEND_COLLAPSE_KEY, nextCollapsed ? "1" : "0");
+  applyLegendState(nextCollapsed);
+});
+
+
+  div.appendChild(toggleBtn);
   return div;
 };
 
 legend.addTo(map);
 
-// Update on resize to stay responsive
+// Update on resize to stay responsive (rebuild legend UI)
 window.addEventListener("resize", () => {
   legend.remove();
   legend.addTo(map);
