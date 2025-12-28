@@ -2502,62 +2502,61 @@ function addUserMarker() {
 }
 
 // ==========================================
-// 📍 ON-DEMAND LOCATION HANDLING
+// 📍 FINAL FIXED LOCATION LOGIC
 // ==========================================
 
-// 1. Core Logic: Only asks if explicitly triggered by user
-function checkAndRequestLocation(isUserAction = false) {
-    const locationStatus = localStorage.getItem('userLocationPreference');
-    
-    // If we already have permission, just get the location
-    if (locationStatus === 'allowed') {
-        fetchUserLocation();
-        return;
-    }
+function initLocationFeature() {
+    const footerBtn = document.getElementById('enableLocationBtn');
+    const savedStatus = localStorage.getItem('userLocationPreference');
 
-    // If this function was called by a USER CLICK (e.g., footer button)
-    if (isUserAction) {
-        askForLocationPermission();
+    // 1. If user previously ALLOWED it, load it silently.
+    if (savedStatus === 'allowed') {
+        if (footerBtn) footerBtn.style.display = 'none'; // Hide button immediately
+        fetchUserLocation(); // Get location
     } 
-    // Otherwise (page load), DO NOTHING. Silence is golden.
+    // 2. If NOT allowed yet, just listen for the click. DO NOT ASK AUTOMATICALLY.
+    else {
+        if (footerBtn) {
+            footerBtn.style.display = 'flex'; // Ensure button is visible
+            
+            // Remove old listeners to prevent duplicates (cloning trick)
+            const newBtn = footerBtn.cloneNode(true);
+            footerBtn.parentNode.replaceChild(newBtn, footerBtn);
+            
+            newBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                askForLocationPermission();
+            });
+        }
+    }
 }
 
-// 2. The UI Prompt
 function askForLocationPermission() {
     showCustomAlert(
         "Enable location to see your position on the map relative to earthquakes.", 
         
-        // ON ALLOW
+        // ON CONFIRM
         function() {
+            // User clicked "Allow" in your custom dialog
             localStorage.setItem('userLocationPreference', 'allowed');
             fetchUserLocation();
-            hideFooterLocationButton(); // Hide the footer button if successful
         },
         
-        // ON NOT NOW
+        // ON CANCEL
         function() {
-            console.log("User clicked NOT NOW.");
-            // We don't need to save a "denied" state anymore because
-            // we aren't auto-asking. The button just stays there.
+            console.log("User cancelled location request.");
         }
     );
 }
 
-// 3. The Fetcher
 function fetchUserLocation() {
-    if (!navigator.geolocation) {
-        showCustomAlert("Geolocation is not supported by your browser.");
-        return;
-    }
+    if (!navigator.geolocation) return;
 
     navigator.geolocation.getCurrentPosition(
         (position) => {
             const { latitude, longitude } = position.coords;
-            userLocation = { lat: latitude, lng: longitude };
             
-            // Save success
-            localStorage.setItem('userLocationPreference', 'allowed');
-
+            // 1. Create/Update Marker
             if (userMarker) {
                 userMarker.setLatLng([latitude, longitude]);
             } else {
@@ -2568,42 +2567,28 @@ function fetchUserLocation() {
                     iconAnchor: [10, 10]
                 });
                 userMarker = L.marker([latitude, longitude], { icon: pulsingIcon }).addTo(map);
-                userMarker.bindPopup("Your Location").openPopup();
+                
+                // Only bind popup, don't open it automatically to avoid clutter
+                userMarker.bindPopup("Your Location"); 
             }
-            
-            // Success! Hide the button since we don't need it anymore
-            hideFooterLocationButton();
+
+            // 2. Hide the footer button permanently
+            const footerBtn = document.getElementById('enableLocationBtn');
+            if (footerBtn) footerBtn.style.display = 'none';
         },
         (error) => {
-            console.warn("Location access denied.", error.message);
-            showCustomAlert("Location access was denied. Please enable it in your browser settings.");
+            console.warn("Location denied:", error);
+            // If they denied it effectively, show the button again so they can retry
+            const footerBtn = document.getElementById('enableLocationBtn');
+            if (footerBtn) footerBtn.style.display = 'flex';
+            localStorage.removeItem('userLocationPreference'); // Reset preference so they can try again
         },
         { enableHighAccuracy: true }
     );
 }
 
-// 4. Helper to hide the footer button
-function hideFooterLocationButton() {
-    // Looks for your footer button by ID or Class
-    const footerBtn = document.getElementById('enableLocationBtn'); 
-    if (footerBtn) footerBtn.style.display = 'none';
-}
-
-// 5. Initialize: Attach click listener, but DON'T auto-run
-document.addEventListener('DOMContentLoaded', () => {
-    const footerBtn = document.getElementById('enableLocationBtn');
-    
-    if (footerBtn) {
-        footerBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            checkAndRequestLocation(true); // true = "This is a user action!"
-        });
-    }
-
-    if (localStorage.getItem('userLocationPreference') === 'allowed') {
-        fetchUserLocation();
-    }
-});
+// Initialize when map is ready
+document.addEventListener('DOMContentLoaded', initLocationFeature);
 
 /************************************************************
  * LEGEND: Slide-hide + Toggle button + Confirm notif
