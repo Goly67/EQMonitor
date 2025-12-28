@@ -1,6 +1,6 @@
 {
-  "name": "EQMonitor",
-  "short_name": "EQMonitor",
+  "name": "Earthquake Monitor",
+  "short_name": "Earthquake Monitor",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#13343B",

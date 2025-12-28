@@ -1878,6 +1878,77 @@ input[type=range]::-moz-range-thumb {
   }
 }
 
+/* Footer & Ownership Styles - FLOATING PILL VERSION */
+.app-footer {
+    position: fixed;
+    bottom: 15px;           /* Raised slightly from the bottom edge */
+    left: 50%;
+    transform: translateX(-50%); /* Centers the pill perfectly */
+    width: max-content;     /* Only takes up as much space as the text */
+    max-width: 90%;         /* Prevents it from being too wide on mobile */
+    
+    padding: var(--space-8) var(--space-16);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full); /* Makes it pill-shaped */
+    box-shadow: var(--shadow-lg);      /* Adds a shadow so it "floats" */
+    
+    z-index: 1000;          /* Lowered z-index slightly so system alerts can pop over it */
+    pointer-events: auto;   /* Ensures you can select the text if needed */
+}
+
+.footer-content {
+    display: flex;
+    flex-direction: row;    /* Keep them side-by-side if they fit */
+    gap: var(--space-12);
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;        /* Allow wrapping on very small screens */
+}
+
+.app-footer p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-family-mono);
+    white-space: nowrap;    /* Keeps the text neat on one line if possible */
+}
+
+.ownership-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    padding-left: var(--space-12);
+    border-left: 1px solid var(--color-border); /* nice separator line */
+}
+
+.status-icon {
+    font-size: var(--font-size-sm);
+}
+
+.owner-name {
+    color: var(--color-primary);
+    font-weight: var(--font-weight-bold);
+}
+
+/* Mobile Adjustment: Stack them if screen is too narrow */
+@media (max-width: 480px) {
+    .app-footer {
+        bottom: 20px; /* Push it higher on mobile to avoid "Install App" banners */
+        width: 85%;
+        border-radius: var(--radius-lg); /* Slightly more square on mobile */
+    }
+    
+    .footer-content {
+        flex-direction: column; /* Stack text on mobile */
+        gap: var(--space-4);
+    }
+
+    .ownership-status {
+        border-left: none;
+        padding-left: 0;
+    }
+}
 
 /* ===== RESPONSIVE DESIGN ===== */
 

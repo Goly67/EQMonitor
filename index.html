@@ -143,6 +143,17 @@
     <div class="status" id="status">Status: Initializing...</div>
   </div>
 
+  <footer class="app-footer">
+    <div class="footer-content">
+        <p class="copyright">
+            &copy; 2025 Earthquake Monitor. All rights reserved.
+        </p>
+        <p class="ownership-status">
+            Ownership claimed by <span class="owner-name">Sam Yujoco</span>
+        </p>
+    </div>
+</footer>
+
   <script src="https://unpkg.com/esri-leaflet@3.0.10/dist/esri-leaflet.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -159,7 +170,6 @@
       databaseURL: "https://presenceapi-f7bf9-default-rtdb.asia-southeast1.firebasedatabase.app"
     };
 
-    firebase.initializeApp(firebaseConfig);
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="https://unpkg.com/esri-leaflet@3.0.11/dist/esri-leaflet.js"></script>
