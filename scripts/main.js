@@ -591,6 +591,34 @@ function magToColor(mag) {
     return "#FEB24C";
 }
 
+// STAR ICON HELPERS (for latest earthquake marker)
+function starPoints(size, spikes = 5, innerRatio = 0.5) {
+  const cx = size / 2;
+  const cy = size / 2;
+  const outerRadius = size / 2;
+  const innerRadius = outerRadius * innerRatio;
+  let rot = -Math.PI / 2;
+  const step = Math.PI / spikes;
+  const pts = [];
+
+  for (let i = 0; i < spikes; i++) {
+    pts.push([cx + Math.cos(rot) * outerRadius, cy + Math.sin(rot) * outerRadius]);
+    rot += step;
+    pts.push([cx + Math.cos(rot) * innerRadius, cy + Math.sin(rot) * innerRadius]);
+    rot += step;
+  }
+
+  return pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
+}
+
+function buildStarSvg(size, fillColor, strokeColor = '#8B0000') {
+  const points = starPoints(size);
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="${points}" stroke="${strokeColor}" stroke-width="2" fill="${fillColor}" fill-opacity="0.95"/>
+  </svg>`;
+}
+
+
 function getDistanceKm(lat1, lon1, lat2, lon2) {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -663,10 +691,10 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
 
     let marker;
 
-    // When placing latest marker (triangle)
+    // When placing latest marker
     if (isLatest) {
         const triangle = L.shapeMarker(ev.lat, ev.lon, {
-            shape: 'triangle',
+            shape: 'star',
             radius: magToRadius(ev.magnitude) * 1.4,
             color: '#ff0000',      // stroke red
             fillColor: '#ff6666',  // fill softer red
@@ -741,7 +769,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
                     tooltip._container.style.zIndex = 9999; // tooltip front
                 }
 
-                // If using divIcon SVG (triangle), raise its z-index
+                // If using divIcon SVG, raise its z-index
                 const el = markerLayer.getElement?.();
                 if (el) {
                     el.style.zIndex = 9999;
@@ -773,13 +801,13 @@ function animateLatestMarker(marker) {
     const tooltip = marker.getTooltip()?._container;
     if (tooltip) tooltip.classList.add("flash");
 
-    // Handle both circleMarker and shapeMarker (triangle)
+    // Handle both circleMarker and shapeMarker
     if (marker._path) {
         marker._path.classList.add("flash-circle"); // Circle SVG
     } else {
         const el = marker.getElement?.();
         if (el) {
-            el.classList.add("flash-circle"); // Triangle SVG
+            el.classList.add("flash-circle"); // DivIcon SVG
             el.style.filter = "drop-shadow(0 0 10px rgba(255, 60, 60, 0.9))";
         }
     }
@@ -2058,7 +2086,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
         const prev = markers.get(latestMarker._eventId);
         if (prev && prev.data) {
             try {
-                // remove the triangle/latest marker layer
+                // remove the star/latest marker layer
                 map.removeLayer(latestMarker);
             } catch (err) { /* ignore */ }
 
@@ -2091,17 +2119,14 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
         }
     }
 
-    // Create the marker: triangle if latest, circle otherwise
+    // Create the marker: star if latest, circle otherwise
     let markerLayer;
     if (isLatest) {
         const size = Math.max(24, Math.round(magToRadius(ev.magnitude) * 2) + 8);
-        const points = `${size / 2},0 0,${size} ${size},${size}`;
-        const svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-                   <polygon points="${points}" stroke="#8B0000" stroke-width="2" fill="${magToColor(ev.magnitude)}" fill-opacity="0.95" />
-                 </svg>`;
+        const svg = buildStarSvg(size, magToColor(ev.magnitude), '#8B0000');
 
         const icon = L.divIcon({
-            className: "triangle-marker-divicon",
+            className: "star-marker-divicon",
             html: svg,
             iconSize: [size, size],
             iconAnchor: [size / 2, size / 2]
@@ -2193,7 +2218,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
                     tooltip._container.style.zIndex = 9999;
                 }
 
-                // For divIcon / triangle markers
+                // For divIcon markers
                 const el = markerLayer.getElement?.();
                 if (el) {
                     el.style.zIndex = 9999;
@@ -2470,7 +2495,8 @@ legend.onAdd = function (map) {
             `${grades[i]}${grades[i + 1] ? "&ndash;" + grades[i + 1] : "+"}<br>`;
     }
 
-    div.innerHTML += `<i style="background:#ff6666; width:${iconSize}px; height:${iconSize}px; display:inline-block; margin-right:8px; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></i> Latest Earthquake`;
+    // Star icon in legend (CSS clip-path star)
+    div.innerHTML += `<i style="background:#ff6666; width:${iconSize}px; height:${iconSize}px; display:inline-block; margin-right:8px; clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);"></i> Latest Earthquake`;
 
     return div;
 };
