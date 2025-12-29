@@ -1931,6 +1931,153 @@ input[type=range]::-moz-range-thumb {
     font-weight: var(--font-weight-bold);
 }
 
+/* ==== CUSTOM ALERT (MATCHES THEME) ==== */
+.eq-alert-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(var(--space-16), env(safe-area-inset-top))
+    max(var(--space-16), env(safe-area-inset-right))
+    max(var(--space-16), env(safe-area-inset-bottom))
+    max(var(--space-16), env(safe-area-inset-left));
+  z-index: 999999;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.eq-alert-card {
+  width: 100%;
+  max-width: 460px;
+  border-radius: calc(var(--radius-lg) + 4px);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  transform-origin: center;
+  animation: eqAlertIn var(--duration-normal) var(--ease-standard) forwards;
+}
+
+.eq-alert-card::before {
+  content: "";
+  display: block;
+  height: 5px;
+  background: linear-gradient(
+    90deg,
+    var(--color-primary) 0%,
+    rgba(var(--color-success-rgb), 0.85) 45%,
+    rgba(var(--color-error-rgb), 0.85) 100%
+  );
+}
+
+.eq-alert-header {
+  display: flex;
+  flex-direction: row;        /* icon left, title right */
+  justify-content: left;    /* center the group */
+  align-items: center;        /* vertical align */
+  gap: var(--space-12);
+  text-align: left;           /* title text normal */
+  padding: var(--space-20) var(--space-16) var(--space-12) var(--space-16);
+}
+
+.eq-alert-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: rgba(var(--color-error-rgb), 0.12);
+  border: 1px solid rgba(var(--color-error-rgb), 0.25);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+}
+
+.eq-alert-title {
+  font-size: var(--font-size-2xl);   /* bigger title */
+  line-height: var(--line-height-tight);
+  margin: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  letter-spacing: var(--letter-spacing-tight);
+  text-transform: uppercase;
+  font-family: var(--font-family-mono);
+}
+
+.eq-alert-body {
+  padding: 0 var(--space-16) var(--space-16) var(--space-16);
+  color: var(--color-text-primary);
+  text-align: center;                /* center message text */
+  padding: 0 var(--space-16) var(--space-16) var(--space-16);
+  margin: 10px 0px 10px;
+  font-size: var(--font-size-lg);    /* bigger body text */
+  line-height: 1.55;
+}
+
+.eq-alert-actions {
+  display: flex;
+  gap: var(--space-10);
+  padding: var(--space-12) var(--space-16) var(--space-16) var(--space-16);
+  border-top: 1px solid var(--color-border);
+  background: linear-gradient(
+    90deg,
+    rgba(var(--color-success-rgb), 0.06) 0%,
+    rgba(var(--color-teal-500-rgb), 0.04) 100%
+  );
+}
+
+.eq-alert-btn {
+  flex: 1;
+  min-height: 48px;
+  font-size: var(--font-size-lg);
+  border-radius: calc(var(--radius-md) + 2px);
+  border: 1px solid var(--color-border);
+  background: var(--color-secondary);
+  color: var(--color-text);
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+  transition: transform var(--duration-normal) var(--ease-standard),
+              box-shadow var(--duration-normal) var(--ease-standard),
+              background var(--duration-normal) var(--ease-standard);
+}
+
+.eq-alert-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(0,0,0,0.12);
+}
+
+.eq-alert-btn:active {
+  transform: translateY(0);
+}
+
+.eq-alert-btn--primary {
+  border: none;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
+  color: var(--color-btn-primary-text);
+}
+
+.eq-alert-btn--primary:hover {
+  box-shadow: 0 12px 22px rgba(var(--color-success-rgb), 0.25);
+}
+
+/* Closing animation */
+.eq-alert-overlay.closing .eq-alert-card {
+  animation: eqAlertOut var(--duration-normal) var(--ease-standard) forwards;
+}
+
+@keyframes eqAlertIn {
+  0% { opacity: 0; transform: translateY(10px) scale(0.96); }
+  60% { opacity: 1; transform: translateY(0) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes eqAlertOut {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(10px) scale(0.97); }
+}
+
+
 /* Mobile Adjustment: Stack them if screen is too narrow */
 @media (max-width: 480px) {
     .app-footer {

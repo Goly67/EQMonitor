@@ -91,61 +91,61 @@ async function loadFaultLines() {
 // Call this function on page load or map ready (automatic, no toggle)
 loadFaultLines();
 
-// Updated Custom Alert with "Not Now" button
-function showCustomAlert(message) {
-    // remove existing alert if open
-    const oldAlert = document.getElementById("customAlert");
-    if (oldAlert) oldAlert.remove();
+// Custom Alert that can run a callback when OK is clicked
+function showCustomAlert(message, onOk = null) {
+  const oldAlert = document.getElementById("customAlert");
+  if (oldAlert) oldAlert.remove();
 
-    const alertBox = document.createElement("div");
-    alertBox.id = "customAlert";
-    alertBox.style.position = "fixed";
-    alertBox.style.top = 0;
-    alertBox.style.left = 0;
-    alertBox.style.width = "100vw";
-    alertBox.style.height = "100vh";
-    alertBox.style.background = "rgba(0,0,0,0.65)";
-    alertBox.style.display = "flex";
-    alertBox.style.alignItems = "center";
-    alertBox.style.justifyContent = "center";
-    alertBox.style.zIndex = "999999";
+  const overlay = document.createElement("div");
+  overlay.id = "customAlert";
+  overlay.className = "eq-alert-overlay";
 
-    alertBox.innerHTML = `
-    <div style="
-      background:#99221c;
-      padding:20px;
-      border-radius:14px;
-      max-width:350px;
-      width:90%;
-      font-family:system-ui;
-      text-align:center;
-      box-shadow:0 8px 20px rgba(0,0,0,0.25);
-      animation: pop .25s ease;
-    ">
-      <div style="font-size:20px;font-weight:600;margin-bottom:8px;"><b>ALERT</b></div>
-      <div style="font-size:15px;margin-bottom:18px;">${message}</div>
-      <button id="alertOkBtn" style="
-        background:#0078ff;
-        border:none;
-        padding:10px 18px;
-        border-radius:10px;
-        color:white;
-        cursor:pointer;
-        font-size:15px;
-        width:100%;
-      ">Okay</button>
+  overlay.innerHTML = `
+    <div class="eq-alert-card" role="dialog" aria-modal="true" aria-label="Alert">
+      <div class="eq-alert-header">
+        <div class="eq-alert-icon" aria-hidden="true">
+          <span class="material-symbols-outlined" style="color: var(--color-error); font-size: 22px;">
+            warning
+          </span>
+        </div>
+        <h3 class="eq-alert-title">Something is wrong.</h3>
+      </div>
+
+      <div class="eq-alert-body">${message}</div>
+
+      <div class="eq-alert-actions">
+        <button id="alertOkBtn" class="eq-alert-btn eq-alert-btn--primary">Okay</button>
+      </div>
     </div>
-
-    <style>
-    @keyframes pop {
-      0% { transform:scale(.85); opacity:0; }
-      100% { transform:scale(1); opacity:1; }
-    }
-    </style>
   `;
 
-    document.body.appendChild(alertBox);
-    document.getElementById("alertOkBtn").onclick = () => alertBox.remove();
+  document.body.appendChild(overlay);
+
+  const close = (runOk = false) => {
+    overlay.classList.add("closing");
+    const removeNow = () => {
+      overlay.remove();
+      document.removeEventListener("keydown", onKeyDown);
+      if (runOk && typeof onOk === "function") onOk();
+    };
+    // Wait for animation
+    setTimeout(removeNow, 250);
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === "Escape") close(false);
+  };
+  document.addEventListener("keydown", onKeyDown);
+
+  overlay.addEventListener("click", (e) => {
+    // click outside card closes
+    if (e.target === overlay) close(false);
+  });
+
+  document.getElementById("alertOkBtn").onclick = () => close(true);
+
+  // Focus for accessibility
+  document.getElementById("alertOkBtn").focus();
 }
 
 // Burger menu toggle
@@ -2361,23 +2361,22 @@ function initLocationButton() {
     }
 
     // Button click handling
-    const btn = document.getElementById("enableLocationBtn");
-    btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        btn.textContent = "Getting location...";
-        const success = await requestLocationPermission(true);
-        if (success) {
-            btn.textContent = "Location Enabled";
-            bar.style.animation = "slideDown 0.4s ease forwards";
-            setTimeout(() => bar.remove(), 400);
-        } else {
-            btn.textContent = "Permission Denied";
-            setTimeout(() => {
-                bar.style.animation = "slideDown 0.4s ease forwards";
-                setTimeout(() => bar.remove(), 400);
-            }, 2000);
-        }
-    });
+    const btn = document.getElementById('enableLocationBtn');
+    if (btn) {
+        btn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            btn.disabled = true;
+            btn.textContent = 'Getting location...';
+            const success = await requestLocationPermission(true);
+            if (success) {
+                btn.textContent = 'Location Enabled';
+            } else {
+                btn.textContent = 'Permission Denied';
+                setTimeout(() => { btn.disabled = false; btn.textContent = 'Enable Access'; }, 2000);
+            }
+        });
+    }
+
 }
 
 /************************************************************************
@@ -2432,99 +2431,117 @@ function getAndStoreUserLocation() {
     });
 }
 
+// Helper to request location with user gesture
 async function requestLocationPermission(forceAsk = false) {
-    if (!("geolocation" in navigator)) {
+    if (!navigator.geolocation) {
         showCustomAlert("Geolocation not supported by this browser.");
         return false;
     }
-
-    if (location.protocol !== "https:" && location.hostname !== "localhost") {
-        showCustomAlert("⚠️ Location access requires HTTPS. Please use a secure (https://) site.");
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        showCustomAlert("Location access requires HTTPS. Use a secure site.");
         return false;
     }
 
-    let state = "prompt";
     try {
-        const status = await navigator.permissions.query({ name: "geolocation" });
-        state = status.state;
-    } catch { }
-
-    if (state === "granted" && !forceAsk) return getAndStoreUserLocation();
-
-    if (state === "prompt" || forceAsk) {
+        const { state } = await navigator.permissions.query({ name: 'geolocation' });
+        if (state === 'granted' && !forceAsk) {
+            return getAndStoreUserLocation();
+        }
+        if (state === 'prompt' && forceAsk) {
+            return new Promise((resolve) => {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        userLocation = {
+                            lat: pos.coords.latitude,
+                            lon: pos.coords.longitude,
+                            accuracy: pos.coords.accuracy
+                        };
+                        console.log("Location obtained:", userLocation);
+                        localStorage.setItem('userLocation', JSON.stringify(userLocation));
+                        localStorage.setItem('locationPermission', 'granted');
+                        localStorage.setItem('userLocationPreference', 'allowed');
+                        hideLocationBar(); // Hide any bars/buttons
+                        addUserMarker();
+                        resolve(true);
+                    },
+                    (err) => {
+                        console.warn("Location error:", err);
+                        if (err.code === 1) {
+                            showCustomAlert("Location access blocked. Enable in browser settings > Site settings > Location.");
+                        } else {
+                            showCustomAlert(`Unable to get location: ${err.message}`);
+                        }
+                        localStorage.setItem('locationPermission', 'denied');
+                        resolve(false);
+                    },
+                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+                );
+            });
+        }
+        if (state === 'denied') {
+            showCustomAlert("Location access denied. Enable in browser settings.");
+            return false;
+        }
+    } catch (err) {
+        // Fallback for older browsers
         return new Promise((resolve) => {
             navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    userLocation = {
-                        lat: pos.coords.latitude,
-                        lon: pos.coords.longitude,
-                        accuracy: pos.coords.accuracy,
-                    };
-                    console.log("✅ Location obtained:", userLocation);
-
-                    // Persist coordinates so a reload can restore the marker without another permission prompt
-                    try {
-                        localStorage.setItem('userLocation', JSON.stringify(userLocation));
-                    } catch (e) { console.warn('Failed to persist userLocation:', e); }
-
-                    localStorage.setItem("locationPermission", "granted");
-                    localStorage.setItem('userLocationPreference', 'allowed');
-
-                    // Hide/remove any UI prompts (cover both possible elements)
-                    document.getElementById('enableLocationBar')?.remove();
-                    const footerBtn = document.getElementById('enableLocationBtn');
-                    if (footerBtn) footerBtn.style.display = 'none';
-
-                    // Add marker and center map
-                    addUserMarker();
-
-                    resolve(true);
-                },
-
-                (err) => {
-                    console.warn("⚠️ Location error:", err);
-                    if (err.code === 1)
-                        showCustomAlert(`This is an unofficial browser!<br>Please proceed to Chrome or Safari for location access.`);
-                    else
-                        showCustomAlert(`Unable to get location.<br>${err.message}`);
-
-                    localStorage.setItem("locationPermission", "denied");
-                    resolve(false);
-                },
+                (pos) => { /* same success handler as above */ resolve(true); },
+                () => resolve(false),
                 { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
             );
         });
     }
-
-    if (state === "denied") {
-        showCustomAlert(
-            "Location access has been blocked.\n\n" +
-            "Please go to your browser settings > Site Settings > Allow Location."
-        );
-        return false;
-    }
 }
 
+// Hide location bar/button
+function hideLocationBar() {
+    const bar = document.getElementById('enableLocationBar');
+    const btn = document.getElementById('enableLocationBtn');
+    if (bar) {
+        bar.style.animation = 'slideDown 0.4s ease forwards';
+        setTimeout(() => bar.remove(), 400);
+    }
+    if (btn) btn.style.display = 'none';
+}
+
+// Store and add user marker
+function getAndStoreUserLocation() {
+    return new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                userLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy };
+                localStorage.setItem('userLocation', JSON.stringify(userLocation));
+                hideLocationBar();
+                addUserMarker();
+                resolve(true);
+            },
+            (err) => {
+                console.warn("Silent location failed:", err);
+                localStorage.setItem('locationPermission', 'denied');
+                resolve(false);
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+        );
+    });
+}
 
 /************************************************************************
  * Adds the user's marker to the map
  ************************************************************************/
+
 function addUserMarker() {
-    if (!userLocation) return;
+    if (!userLocation || !map) return;
     if (userMarker) map.removeLayer(userMarker);
-
-    userMarker = L.marker([userLocation.lat, userLocation.lon], {
-        title: "Your Location",
-        icon: L.icon({
-            iconUrl: "https://cdn-icons-png.flaticon.com/512/535/535137.png",
-            iconSize: [30, 30],
-            iconAnchor: [15, 30],
-        }),
-    })
+    const pulsingIcon = L.divIcon({
+        className: 'user-location-marker',
+        html: '<div class="pulse-ring"></div><div class="user-dot"></div>',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+    });
+    userMarker = L.marker([userLocation.lat, userLocation.lon], { icon: pulsingIcon })
         .addTo(map)
-        .bindPopup("📍 You are here")
-        .openPopup();
-
+        .bindPopup('You are here').openPopup();
     map.setView([userLocation.lat, userLocation.lon], 7);
 }
 
@@ -2568,12 +2585,19 @@ function initLocationFeature() {
     const savedStatus = localStorage.getItem('userLocationPreference');
     const savedPerm = localStorage.getItem('locationPermission');
     const savedPref = localStorage.getItem('userLocationPreference');
-
-    // Hide bar immediately if previously granted
     if (savedPerm === 'granted' && savedPref === 'allowed') {
-        hideLocationBar();
-        fetchUserLocation();  // Silent reload
-        return;
+        const savedLocJSON = localStorage.getItem('userLocation');
+        if (savedLocJSON) {
+            try {
+                userLocation = JSON.parse(savedLocJSON);
+                addUserMarker();
+                hideLocationBar();
+            } catch (e) {
+                console.warn("Invalid saved location:", e);
+            }
+        } else {
+            getAndStoreUserLocation();
+        }
     }
 
     // 1. If user previously ALLOWED it, load it silently.
@@ -2599,21 +2623,20 @@ function initLocationFeature() {
 }
 
 function askForLocationPermission() {
-    showCustomAlert(
-        "Enable location to see your position on the map relative to earthquakes.",
+  showCustomAlert(
+    "Enable location to see your position on the map relative to earthquakes.",
+    async () => {
+      // OK click is a user gesture, so geolocation permission prompt is allowed here
+      localStorage.setItem("userLocationPreference", "allowed");
 
-        // ON CONFIRM
-        function () {
-            // User clicked "Allow" in your custom dialog
-            localStorage.setItem('userLocationPreference', 'allowed');
-            fetchUserLocation();
-        },
-
-        // ON CANCEL
-        function () {
-            console.log("User cancelled location request.");
-        }
-    );
+      const ok = await requestLocationPermission(true); // forceAsk = true
+      if (!ok) {
+        // Allow retry later if user cancels/denies
+        localStorage.removeItem("userLocationPreference");
+        localStorage.setItem("locationPermission", "denied");
+      }
+    }
+  );
 }
 
 function fetchUserLocation() {
