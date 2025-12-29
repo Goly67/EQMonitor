@@ -2077,6 +2077,52 @@ input[type=range]::-moz-range-thumb {
   100% { opacity: 0; transform: translateY(10px) scale(0.97); }
 }
 
+/* User Location Marker Styles */
+.user-location-marker {
+    background: transparent;
+    border: none;
+}
+
+.user-dot {
+    width: 14px;
+    height: 14px;
+    background-color: #4285F4;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 4px rgba(0,0,0,0.3);
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+}
+
+.pulse-ring {
+    border: 3px solid #4285F4;
+    border-radius: 50%;
+    height: 40px;
+    width: 40px;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    animation: pulsate 2s ease-out infinite;
+    opacity: 0;
+    z-index: 1;
+    pointer-events: none; /* Let clicks pass through to the map */
+}
+
+@keyframes pulsate {
+    0% {
+        transform: translate(-50%, -50%) scale(0.1);
+        opacity: 0.8;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1.2);
+        opacity: 0;
+    }
+}
+
 
 /* Mobile Adjustment: Stack them if screen is too narrow */
 @media (max-width: 480px) {

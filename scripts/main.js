@@ -2432,67 +2432,53 @@ function getAndStoreUserLocation() {
 }
 
 // Helper to request location with user gesture
-async function requestLocationPermission(forceAsk = false) {
-    if (!navigator.geolocation) {
-        showCustomAlert("Geolocation not supported by this browser.");
-        return false;
-    }
-    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-        showCustomAlert("Location access requires HTTPS. Use a secure site.");
-        return false;
+// Helper to request location with user gesture
+function requestLocationPermission() {
+  return new Promise((resolve) => {
+    if (!("geolocation" in navigator)) {
+      showCustomAlert("Geolocation is not supported by this browser.");
+      return resolve(false);
     }
 
-    try {
-        const { state } = await navigator.permissions.query({ name: 'geolocation' });
-        if (state === 'granted' && !forceAsk) {
-            return getAndStoreUserLocation();
-        }
-        if (state === 'prompt' && forceAsk) {
-            return new Promise((resolve) => {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        userLocation = {
-                            lat: pos.coords.latitude,
-                            lon: pos.coords.longitude,
-                            accuracy: pos.coords.accuracy
-                        };
-                        console.log("Location obtained:", userLocation);
-                        localStorage.setItem('userLocation', JSON.stringify(userLocation));
-                        localStorage.setItem('locationPermission', 'granted');
-                        localStorage.setItem('userLocationPreference', 'allowed');
-                        hideLocationBar(); // Hide any bars/buttons
-                        addUserMarker();
-                        resolve(true);
-                    },
-                    (err) => {
-                        console.warn("Location error:", err);
-                        if (err.code === 1) {
-                            showCustomAlert("Location access blocked. Enable in browser settings > Site settings > Location.");
-                        } else {
-                            showCustomAlert(`Unable to get location: ${err.message}`);
-                        }
-                        localStorage.setItem('locationPermission', 'denied');
-                        resolve(false);
-                    },
-                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-                );
-            });
-        }
-        if (state === 'denied') {
-            showCustomAlert("Location access denied. Enable in browser settings.");
-            return false;
-        }
-    } catch (err) {
-        // Fallback for older browsers
-        return new Promise((resolve) => {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => { /* same success handler as above */ resolve(true); },
-                () => resolve(false),
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-            );
-        });
-    }
+    // --- REMOVE OR COMMENT OUT THIS BLOCK ---
+    // if (location.protocol !== "https:" && location.hostname !== "localhost") {
+    //   showCustomAlert("Location access requires HTTPS. Please use a secure https site.");
+    //   return resolve(false);
+    // }
+    // ----------------------------------------
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        userLocation = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
+        };
+
+        localStorage.setItem("userLocation", JSON.stringify(userLocation));
+        localStorage.setItem("locationPermission", "granted");
+        localStorage.setItem("userLocationPreference", "allowed");
+
+        // Use optional chaining just in case function is missing
+        if (typeof hideLocationBar === 'function') hideLocationBar();
+        if (typeof addUserMarker === 'function') addUserMarker();
+        
+        resolve(true);
+      },
+      (err) => {
+        console.warn("Location error:", err); // Added for debugging
+        localStorage.setItem("locationPermission", "denied");
+        
+        // Optional: Show alert if it actually fails
+        // showCustomAlert("Location access denied or error occurred."); 
+        
+        resolve(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
+  });
 }
+
 
 // Hide location bar/button
 function hideLocationBar() {
