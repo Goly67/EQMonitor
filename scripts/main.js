@@ -92,112 +92,61 @@ async function loadFaultLines() {
 loadFaultLines();
 
 // Updated Custom Alert with "Not Now" button
-function showCustomAlert(message, onConfirm, onCancel) {
+function showCustomAlert(message) {
     // remove existing alert if open
     const oldAlert = document.getElementById("customAlert");
     if (oldAlert) oldAlert.remove();
 
     const alertBox = document.createElement("div");
     alertBox.id = "customAlert";
-    Object.assign(alertBox.style, {
-        position: "fixed",
-        top: "0",
-        left: "0",
-        width: "100vw",
-        height: "100vh",
-        background: "rgba(0,0,0,0.65)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: "999999"
-    });
+    alertBox.style.position = "fixed";
+    alertBox.style.top = 0;
+    alertBox.style.left = 0;
+    alertBox.style.width = "100vw";
+    alertBox.style.height = "100vh";
+    alertBox.style.background = "rgba(0,0,0,0.65)";
+    alertBox.style.display = "flex";
+    alertBox.style.alignItems = "center";
+    alertBox.style.justifyContent = "center";
+    alertBox.style.zIndex = "999999";
 
     alertBox.innerHTML = `
     <div style="
-      background: var(--color-surface, #fff); /* Use theme variable if available */
-      color: var(--color-text, #333);
-      padding: 24px;
-      border-radius: 16px;
-      max-width: 340px;
-      width: 85%;
-      font-family: var(--font-family-base, system-ui, sans-serif);
-      text-align: center;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-      animation: popAlert 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      border: 1px solid var(--color-border, #eee);
+      background:#99221c;
+      padding:20px;
+      border-radius:14px;
+      max-width:350px;
+      width:90%;
+      font-family:system-ui;
+      text-align:center;
+      box-shadow:0 8px 20px rgba(0,0,0,0.25);
+      animation: pop .25s ease;
     ">
-      <div style="
-        font-size: 18px; 
-        font-weight: 700; 
-        margin-bottom: 12px;
-        color: var(--color-text, #333);
-      ">
-        Location Access
-      </div>
-      
-      <div style="
-        font-size: 15px; 
-        line-height: 1.5; 
-        margin-bottom: 24px; 
-        color: var(--color-text-secondary, #666);
-      ">
-        ${message}
-      </div>
-      
-      <div style="display: flex; gap: 12px;">
-        <button id="alertCancelBtn" style="
-          flex: 1;
-          background: transparent;
-          border: 1px solid var(--color-border, #ccc);
-          padding: 10px 16px;
-          border-radius: 10px;
-          color: var(--color-text-secondary, #666);
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 600;
-          transition: background 0.2s;
-        ">Not now</button>
-
-        <button id="alertOkBtn" style="
-          flex: 1;
-          background: var(--color-primary, #0078ff);
-          border: none;
-          padding: 10px 16px;
-          border-radius: 10px;
-          color: #fff;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 600;
-          box-shadow: 0 4px 12px rgba(0,120,255,0.3);
-        ">Allow</button>
-      </div>
+      <div style="font-size:20px;font-weight:600;margin-bottom:8px;"><b>ALERT</b></div>
+      <div style="font-size:15px;margin-bottom:18px;">${message}</div>
+      <button id="alertOkBtn" style="
+        background:#0078ff;
+        border:none;
+        padding:10px 18px;
+        border-radius:10px;
+        color:white;
+        cursor:pointer;
+        font-size:15px;
+        width:100%;
+      ">Okay</button>
     </div>
 
     <style>
-    @keyframes popAlert {
-      0% { transform: scale(0.9); opacity: 0; }
-      100% { transform: scale(1); opacity: 1; }
+    @keyframes pop {
+      0% { transform:scale(.85); opacity:0; }
+      100% { transform:scale(1); opacity:1; }
     }
-    #alertCancelBtn:hover { background: rgba(0,0,0,0.05); }
-    #alertOkBtn:hover { filter: brightness(1.1); }
     </style>
   `;
 
     document.body.appendChild(alertBox);
-
-    // CONFIRM ACTION
-    document.getElementById("alertOkBtn").onclick = () => {
-        alertBox.remove();
-        if (onConfirm) onConfirm();
-    };
-
-    // CANCEL ACTION
-    document.getElementById("alertCancelBtn").onclick = () => {
-        alertBox.remove();
-        if (onCancel) onCancel();
-    };
+    document.getElementById("alertOkBtn").onclick = () => alertBox.remove();
 }
-
 
 // Burger menu toggle
 burgerMenuBtn.addEventListener('click', function () {
