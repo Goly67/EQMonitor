@@ -2842,8 +2842,9 @@ legend.onAdd = function (map) {
     `;
     }
 
+    // Add "Latest Earthquake" entry inside the card
     div.innerHTML += `
-    <div style="display:flex; align-items:center; gap:10px; margin-top:${rowGap + 2}px;">
+    <div style="display:flex; align-items:center; gap:10px; margin-top:${headerGap}px;">
       <i style="
         background:#ff6666;
         width:${starIconSize}px;
@@ -2885,7 +2886,6 @@ legend.onAdd = function (map) {
         localStorage.setItem(LEGEND_COLLAPSE_KEY, nextCollapsed ? "1" : "0");
         applyLegendState(nextCollapsed);
     });
-
 
     div.appendChild(toggleBtn);
     return div;
@@ -3011,20 +3011,3 @@ fetchNewEvents = async function () {
 if (typeof eventSource !== "undefined") {
     eventSource.addEventListener("message", (event) => markUpdate());
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    notifications = [];
-    updateNotificationUI();
-    initPWAInstallCard();  // ADD THIS LINE - runs after DOM is ready
-    console.log('[Notification System] Initialized');
-});
-
-// Watchdog: check every minute if data stalled for 5+ minutes
-setInterval(() => {
-    const minutesSinceLastUpdate = (Date.now() - lastUpdateTime) / 60000;
-    if (minutesSinceLastUpdate > 5) {
-        console.warn("⚠️ No new earthquake updates for 5 minutes. Attempting to refetch...");
-        fetchNewEvents(); // Just refetch data instead of reloading entire page
-    }
-
-}, 60000);

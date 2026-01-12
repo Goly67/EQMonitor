@@ -2728,6 +2728,33 @@ body{
   transform: translateY(0);
 }
 
+.contact-link{
+  display:flex;
+  align-items:flex-start;
+  gap: 10px;
+  width: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.contact-link:hover{
+  text-decoration: none;
+}
+
+.contact-list li:has(.contact-link){
+  padding: 0; /* remove li padding because the link will handle it */
+}
+
+.contact-list li .contact-link{
+  padding: 10px 10px;
+  border-radius: 12px;
+}
+
+.contact-list li .contact-link:active{
+  transform: scale(0.99);
+}
+
+
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce){
   *{
