@@ -759,6 +759,15 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
                 const tooltip = markerLayer.getTooltip();
                 if (tooltip && tooltip._container) {
                     tooltip._container.style.zIndex = 9999; // tooltip front
+
+                    // Ensure tooltip stays within viewport
+                    const rect = tooltip._container.getBoundingClientRect();
+                    if (rect.right > window.innerWidth) {
+                        tooltip._container.style.left = `${window.innerWidth - rect.width - 10}px`;
+                    }
+                    if (rect.bottom > window.innerHeight) {
+                        tooltip._container.style.top = `${window.innerHeight - rect.height - 10}px`;
+                    }
                 }
 
                 // If using divIcon SVG, raise its z-index
@@ -2089,7 +2098,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
                 color: "#222",
                 weight: 1,
                 fillOpacity: 0.8,
-                fillColor: magToColor(prevData.magnitude)
+                fillColor: magToColor(prevData.magnitude),
             }).bindPopup(`
                 <strong>${prevData.location || "Unknown"}</strong><br>
                 Mag: ${prevData.magnitude}<br>
@@ -2207,10 +2216,19 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
                 // If tooltip exists
                 const tooltip = markerLayer.getTooltip();
                 if (tooltip && tooltip._container) {
-                    tooltip._container.style.zIndex = 9999;
+                    tooltip._container.style.zIndex = 9999; // tooltip front
+
+                    // Ensure tooltip stays within viewport
+                    const rect = tooltip._container.getBoundingClientRect();
+                    if (rect.right > window.innerWidth) {
+                        tooltip._container.style.left = `${window.innerWidth - rect.width - 10}px`;
+                    }
+                    if (rect.bottom > window.innerHeight) {
+                        tooltip._container.style.top = `${window.innerHeight - rect.height - 10}px`;
+                    }
                 }
 
-                // For divIcon markers
+                // If using divIcon SVG, raise its z-index
                 const el = markerLayer.getElement?.();
                 if (el) {
                     el.style.zIndex = 9999;
@@ -2308,7 +2326,7 @@ async function initLocationButton() {
       justify-content: center;
       align-items: center;
       padding: 14px 10px;
-      box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.25);
       animation: slideUp 0.4s ease forwards;
       font-family: "Inter", sans-serif;
     }
