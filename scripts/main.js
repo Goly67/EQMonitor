@@ -100,24 +100,24 @@ function showCustomAlert(message, onOk = null) {
   overlay.id = "customAlert";
   overlay.className = "eq-alert-overlay";
 
-  overlay.innerHTML = `
+overlay.innerHTML = `
     <div class="eq-alert-card" role="dialog" aria-modal="true" aria-label="Alert">
-      <div class="eq-alert-header">
-        <div class="eq-alert-icon" aria-hidden="true">
-          <span class="material-symbols-outlined" style="color: var(--color-error); font-size: 22px;">
-            warning
-          </span>
+        <div class="eq-alert-header">
+            <div class="eq-alert-icon" aria-hidden="true">
+                <span class="material-symbols-outlined" style="color: var(--color-warning); font-size: 22px;">
+                    notifications
+                </span>
+            </div>
+            <h3 class="eq-alert-title">Notification</h3>
         </div>
-        <h3 class="eq-alert-title">Something is wrong.</h3>
-      </div>
 
-      <div class="eq-alert-body">${message}</div>
+        <div class="eq-alert-body">${message}</div>
 
-      <div class="eq-alert-actions">
-        <button id="alertOkBtn" class="eq-alert-btn eq-alert-btn--primary">Okay</button>
-      </div>
+        <div class="eq-alert-actions">
+            <button id="alertOkBtn" class="eq-alert-btn eq-alert-btn--primary">Okay</button>
+        </div>
     </div>
-  `;
+`;
 
   document.body.appendChild(overlay);
 
@@ -2253,7 +2253,31 @@ if (savedPerm === 'granted' || savedPref === 'allowed') {
 }
 
 
-function initLocationButton() {
+async function initLocationButton() {
+    // If the user already granted geolocation permission (browser-level)
+    // or previously allowed it in the app, do not show the footer bar.
+    try {
+        const storedPerm = localStorage.getItem('locationPermission');
+        const storedPref = localStorage.getItem('userLocationPreference');
+
+        if (storedPerm === 'granted' || storedPref === 'allowed') {
+            try { await getAndStoreUserLocation(); } catch (e) { /* ignore */ }
+            return;
+        }
+
+        if (navigator.permissions && navigator.permissions.query) {
+            const p = await navigator.permissions.query({ name: 'geolocation' });
+            if (p && p.state === 'granted') {
+                localStorage.setItem('locationPermission', 'granted');
+                localStorage.setItem('userLocationPreference', 'allowed');
+                try { await getAndStoreUserLocation(); } catch (e) { /* ignore */ }
+                return;
+            }
+        }
+    } catch (err) {
+        console.warn('initLocationButton permission check failed', err);
+    }
+
     // Prevent duplicates
     if (document.getElementById("enableLocationBar")) return;
 

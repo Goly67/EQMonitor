@@ -265,10 +265,77 @@
     --color-info: var(--color-gray-300);
     --color-focus-ring: rgba(var(--color-teal-300-rgb), 0.4);
     --color-btn-primary-text: var(--color-slate-900);
-    --color-card-border: rgba(var(--color-gray-400-rgb), 0.15);
+    --color-card-border: rgba(var(--color-gray-400-rgb), 0.2);
     --color-card-border-inner: rgba(var(--color-gray-400-rgb), 0.15);
     --shadow-inset-sm: inset 0 1px 0 rgba(255, 255, 255, 0.1),
         inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+    --button-border-secondary: rgba(var(--color-gray-400-rgb), 0.2);
+    --color-border-secondary: rgba(var(--color-gray-400-rgb), 0.2);
+    --color-select-caret: rgba(var(--color-gray-200-rgb), 0.8);
+
+    /* Common style patterns - updated for dark mode */
+    --focus-ring: 0 0 0 3px var(--color-focus-ring);
+    --focus-outline: 2px solid var(--color-primary);
+    --status-bg-opacity: 0.15;
+    --status-border-opacity: 0.25;
+    --select-caret-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23134252' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    --select-caret-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23f5f5f5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+
+    /* RGB versions for dark mode */
+    --color-success-rgb: var(--color-teal-300-rgb);
+    --color-error-rgb: var(--color-red-400-rgb);
+    --color-warning-rgb: var(--color-orange-400-rgb);
+    --color-info-rgb: var(--color-gray-300-rgb);
+}
+
+[data-color-scheme="dark"] {
+    /* RGB versions for opacity control (dark mode) */
+    --color-gray-400-rgb: 119, 124, 124;
+    --color-teal-300-rgb: 50, 184, 198;
+    --color-gray-300-rgb: 167, 169, 169;
+    --color-gray-200-rgb: 245, 245, 245;
+
+    /* Colorful background palette - Dark Mode */
+    --color-bg-1: rgba(29, 78, 216, 0.15);
+    /* Dark blue */
+    --color-bg-2: rgba(180, 83, 9, 0.15);
+    /* Dark yellow */
+    --color-bg-3: rgba(21, 128, 61, 0.15);
+    /* Dark green */
+    --color-bg-4: rgba(185, 28, 28, 0.15);
+    /* Dark red */
+    --color-bg-5: rgba(107, 33, 168, 0.15);
+    /* Dark purple */
+    --color-bg-6: rgba(194, 65, 12, 0.15);
+    /* Dark orange */
+    --color-bg-7: rgba(190, 24, 93, 0.15);
+    /* Dark pink */
+    --color-bg-8: rgba(8, 145, 178, 0.15);
+    /* Dark cyan */
+
+    /* Semantic Color Tokens (Dark Mode) */
+    --color-background: var(--color-charcoal-700);
+    --color-surface: var(--color-charcoal-800);
+    --color-text: var(--color-gray-200);
+    --color-text-secondary: rgba(var(--color-gray-300-rgb), 0.7);
+    --color-primary: var(--color-teal-300);
+    --color-primary-hover: var(--color-teal-400);
+    --color-primary-active: var(--color-teal-800);
+    --color-secondary: rgba(var(--color-gray-400-rgb), 0.15);
+    --color-secondary-hover: rgba(var(--color-gray-400-rgb), 0.25);
+    --color-secondary-active: rgba(var(--color-gray-400-rgb), 0.3);
+    --color-border: rgba(var(--color-gray-400-rgb), 0.3);
+    --color-error: var(--color-red-400);
+    --color-success: var(--color-teal-300);
+    --color-warning: var(--color-orange-400);
+    --color-info: var(--color-gray-300);
+    --color-focus-ring: rgba(var(--color-teal-300-rgb), 0.4);
+    --color-btn-primary-text: var(--color-slate-900);
+    --color-card-border: rgba(var(--color-gray-400-rgb), 0.2);
+    --color-card-border-inner: rgba(var(--color-gray-400-rgb), 0.15);
+    --shadow-inset-sm: inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+    --button-border-secondary: rgba(var(--color-gray-400-rgb), 0.2);
     --color-border-secondary: rgba(var(--color-gray-400-rgb), 0.2);
     --color-select-caret: rgba(var(--color-gray-200-rgb), 0.8);
 
@@ -1405,7 +1472,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all var(--duration-fast) var(--ease-standard);
 }
 
 .notification-panel-close:hover {
@@ -1782,6 +1848,32 @@ input[type=range]::-moz-range-thumb {
 
 .notification-panel::-webkit-scrollbar-thumb:hover {
     background: rgba(var(--color-success-rgb), 0.6);
+}
+
+/* Remove scrollbar from the card */
+.pwa-install-card-inner {
+  /* ...existing code... */
+  overflow: hidden; /* Prevent internal scrolling */
+}
+
+/* Redesign the scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1); /* Light background for the track */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(33, 128, 141, 0.8); /* Teal color for the thumb */
+  border-radius: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.5); /* Add a border for contrast */
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(33, 128, 141, 1); /* Darker teal on hover */
 }
 
 .menu-overlay.active {
@@ -2405,4 +2497,253 @@ input[type=range]::-moz-range-thumb {
     .notification-panel {
         max-height: 45vh;
     }
+}
+
+/* Quake map shake animation (appended) */
+@keyframes quake-shake {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    10% { transform: translate(var(--quake-shake-intensity, 6px), calc(var(--quake-shake-intensity, 6px) * -0.6)) rotate(-0.6deg); }
+    20% { transform: translate(calc(var(--quake-shake-intensity, 6px) * -0.6), var(--quake-shake-intensity, 6px)) rotate(0.7deg); }
+    30% { transform: translate(var(--quake-shake-intensity, 6px), calc(var(--quake-shake-intensity, 6px) * 0.6)) rotate(-0.4deg); }
+    40% { transform: translate(calc(var(--quake-shake-intensity, 6px) * -0.8), calc(var(--quake-shake-intensity, 6px) * -0.4)) rotate(0.4deg); }
+    50% { transform: translate(0, calc(var(--quake-shake-intensity, 6px) * -0.2)) rotate(0deg); }
+    60% { transform: translate(calc(var(--quake-shake-intensity, 6px) * 0.5), calc(var(--quake-shake-intensity, 6px) * 0.5)) rotate(-0.3deg); }
+    70% { transform: translate(calc(var(--quake-shake-intensity, 6px) * -0.4), calc(var(--quake-shake-intensity, 6px) * -0.6)) rotate(0.6deg); }
+    80% { transform: translate(var(--quake-shake-intensity, 6px), 0) rotate(-0.5deg); }
+    90% { transform: translate(calc(var(--quake-shake-intensity, 6px) * -0.3), var(--quake-shake-intensity, 6px)) rotate(0.2deg); }
+    100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+#map.quake-shake {
+    animation-name: quake-shake;
+    animation-duration: var(--quake-shake-duration, 1200ms);
+    animation-timing-function: ease-out;
+    animation-iteration-count: 1;
+    will-change: transform;
+    transform-origin: center center;
+    pointer-events: auto;
+}
+
+/* ===== Privacy page (modern) ===== */
+
+.policy-container{
+  padding: 28px 20px;
+  max-width: 980px;
+  margin: 96px auto 140px;
+  box-sizing: border-box;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Optional modern background behind the card */
+body{
+  background:
+    radial-gradient(900px 420px at 12% 12%, rgba(74,163,255,0.22), transparent 55%),
+    radial-gradient(800px 360px at 88% 18%, rgba(46,204,113,0.14), transparent 60%),
+    radial-gradient(720px 380px at 40% 92%, rgba(155,89,182,0.10), transparent 60%),
+    var(--color-bg, #0b1220);
+}
+
+.policy-card{
+  position: relative;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 18px;
+  padding: 26px;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+  color: var(--color-text);
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  overflow: hidden;
+}
+
+/* subtle “border glint” */
+.policy-card::before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  background: linear-gradient(135deg, rgba(74,163,255,0.30), rgba(46,204,113,0.12), rgba(155,89,182,0.18));
+  opacity: 0.45;
+  filter: blur(18px);
+  pointer-events:none;
+}
+
+.policy-card > *{
+  position: relative;
+  z-index: 1;
+}
+
+.policy-header{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  margin-bottom: 10px;
+}
+
+.policy-badge{
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display:grid;
+  place-items:center;
+  background: rgba(74,163,255,0.14);
+  border: 1px solid rgba(74,163,255,0.22);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+}
+
+.policy-badge .material-symbols-outlined{
+  font-size: 26px;
+  color: #e7eaee;
+}
+
+.policy-title h2{
+  margin:0;
+  font-size: 1.55rem;
+  letter-spacing: 0.2px;
+}
+
+.policy-meta{
+  margin-top: 6px;
+  color: var(--color-text-secondary);
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size: 0.95rem;
+}
+
+.meta-icon{
+  font-size: 18px;
+  opacity: 0.9;
+}
+
+.policy-lead{
+  margin-top: 12px;
+  color: rgba(255,255,255,0.86);
+  line-height: 1.6;
+}
+
+.policy-section{
+  margin-top: 18px;
+  padding: 14px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.14);
+  transition: transform 220ms ease, border-color 220ms ease, background 220ms ease;
+}
+
+.policy-section:hover{
+  transform: translateY(-2px);
+  border-color: rgba(74,163,255,0.22);
+  background: rgba(0,0,0,0.18);
+}
+
+.policy-section h3{
+  margin: 0 0 8px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color: var(--color-success);
+  font-size: 1.05rem;
+}
+
+.section-icon{
+  font-size: 22px;
+  color: rgba(140,198,255,0.95);
+}
+
+.policy-card ul{
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.policy-card li{
+  line-height: 1.6;
+  margin: 8px 0;
+}
+
+.contact-list{
+  list-style: none;
+  padding-left: 0;
+  margin-top: 10px;
+}
+
+.contact-list li{
+  display:flex;
+  align-items:flex-start;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.contact-list .material-symbols-outlined{
+  font-size: 20px;
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.actions{
+  margin-top: 18px;
+}
+
+.return-btn{
+  display:inline-flex;
+  align-items:center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  text-decoration:none;
+  color: var(--color-btn-primary-text) !important;
+  box-shadow: 0 14px 35px rgba(0,0,0,0.35);
+  transform: translateZ(0);
+  transition: transform 200ms ease, filter 200ms ease;
+}
+
+.return-btn:hover{
+  transform: translateY(-2px);
+  filter: brightness(1.03);
+  text-decoration:none;
+}
+
+.return-btn:active{
+  transform: translateY(0px) scale(0.99);
+}
+
+/* Make the back icon match the button text */
+.return-btn .material-symbols-outlined{
+  color: currentColor !important; /* same as the button text color */
+}
+
+/* Reveal animation hooks (paired with JS below) */
+[data-reveal]{
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 520ms ease, transform 520ms ease;
+}
+
+[data-reveal].is-visible{
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *{
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 480px){
+  .policy-container{
+    margin: 80px 12px 120px;
+    padding: 0;
+  }
+  .policy-card{
+    padding: 18px;
+    border-radius: 16px;
+  }
 }
