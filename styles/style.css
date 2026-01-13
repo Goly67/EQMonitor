@@ -2536,34 +2536,40 @@ input[type=range]::-moz-range-thumb {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Optional modern background behind the card */
+/* Background respects your theme */
 body{
   background:
-    radial-gradient(900px 420px at 12% 12%, rgba(74,163,255,0.22), transparent 55%),
-    radial-gradient(800px 360px at 88% 18%, rgba(46,204,113,0.14), transparent 60%),
-    radial-gradient(720px 380px at 40% 92%, rgba(155,89,182,0.10), transparent 60%),
-    var(--color-bg, #0b1220);
+    radial-gradient(900px 420px at 12% 12%, var(--color-bg-1, rgba(74,163,255,0.22)), transparent 55%),
+    radial-gradient(800px 360px at 88% 18%, var(--color-bg-3, rgba(46,204,113,0.14)), transparent 60%),
+    radial-gradient(720px 380px at 40% 92%, var(--color-bg-5, rgba(155,89,182,0.10)), transparent 60%),
+    var(--color-background, var(--color-bg, #0b1220));
 }
 
 .policy-card{
   position: relative;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.10);
+  /* Dynamic glass effect */
+  background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
   border-radius: 18px;
   padding: 26px;
-  box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+  box-shadow: 0 7px 20px rgba(0,0,0,0.18);
   color: var(--color-text);
   backdrop-filter: blur(16px) saturate(130%);
   -webkit-backdrop-filter: blur(16px) saturate(130%);
   overflow: hidden;
 }
 
-/* subtle “border glint” */
+/* Dynamic border glint */
 .policy-card::before{
   content:"";
   position:absolute;
   inset:-2px;
-  background: linear-gradient(135deg, rgba(74,163,255,0.30), rgba(46,204,113,0.12), rgba(155,89,182,0.18));
+  background: linear-gradient(
+    135deg, 
+    color-mix(in srgb, var(--color-primary) 35%, transparent),
+    color-mix(in srgb, var(--color-success) 20%, transparent), 
+    color-mix(in srgb, var(--color-bg-5) 60%, transparent)
+  );
   opacity: 0.45;
   filter: blur(18px);
   pointer-events:none;
@@ -2587,14 +2593,15 @@ body{
   border-radius: 14px;
   display:grid;
   place-items:center;
-  background: rgba(74,163,255,0.14);
-  border: 1px solid rgba(74,163,255,0.22);
-  box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.14);
 }
 
 .policy-badge .material-symbols-outlined{
   font-size: 26px;
-  color: #e7eaee;
+  color: var(--color-text);
+  opacity: 0.95;
 }
 
 .policy-title h2{
@@ -2619,7 +2626,8 @@ body{
 
 .policy-lead{
   margin-top: 12px;
-  color: rgba(255,255,255,0.86);
+  color: var(--color-text);
+  opacity: 0.86;
   line-height: 1.6;
 }
 
@@ -2627,15 +2635,15 @@ body{
   margin-top: 18px;
   padding: 14px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(0,0,0,0.14);
+  border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
   transition: transform 220ms ease, border-color 220ms ease, background 220ms ease;
 }
 
 .policy-section:hover{
   transform: translateY(-2px);
-  border-color: rgba(74,163,255,0.22);
-  background: rgba(0,0,0,0.18);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  background: color-mix(in srgb, var(--color-text) 9%, transparent);
 }
 
 .policy-section h3{
@@ -2649,7 +2657,8 @@ body{
 
 .section-icon{
   font-size: 22px;
-  color: rgba(140,198,255,0.95);
+  color: var(--color-primary);
+  opacity: 0.95;
 }
 
 .policy-card ul{
@@ -2674,14 +2683,15 @@ body{
   gap: 10px;
   padding: 10px 10px;
   border-radius: 12px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 
 .contact-list .material-symbols-outlined{
   font-size: 20px;
   margin-top: 2px;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--color-text);
+  opacity: 0.75;
 }
 
 .actions{
@@ -2696,7 +2706,7 @@ body{
   border-radius: 14px;
   text-decoration:none;
   color: var(--color-btn-primary-text) !important;
-  box-shadow: 0 14px 35px rgba(0,0,0,0.35);
+  box-shadow: 0 14px 35px rgba(0,0,0,0.18);
   transform: translateZ(0);
   transition: transform 200ms ease, filter 200ms ease;
 }
@@ -2711,12 +2721,10 @@ body{
   transform: translateY(0px) scale(0.99);
 }
 
-/* Make the back icon match the button text */
 .return-btn .material-symbols-outlined{
-  color: currentColor !important; /* same as the button text color */
+  color: currentColor !important;
 }
 
-/* Reveal animation hooks (paired with JS below) */
 [data-reveal]{
   opacity: 0;
   transform: translateY(10px);
@@ -2742,7 +2750,7 @@ body{
 }
 
 .contact-list li:has(.contact-link){
-  padding: 0; /* remove li padding because the link will handle it */
+  padding: 0;
 }
 
 .contact-list li .contact-link{
@@ -2754,8 +2762,6 @@ body{
   transform: scale(0.99);
 }
 
-
-/* Respect reduced motion */
 @media (prefers-reduced-motion: reduce){
   *{
     animation: none !important;
