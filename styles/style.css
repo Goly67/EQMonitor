@@ -1328,6 +1328,22 @@ body {
     box-shadow: 0 0 var(--space-8) rgba(var(--color-success-rgb), 0.8);
 }
 
+.version-badge {
+    background-color: var(--color-primary);
+    color: var(--color-btn-primary-text);
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: var(--font-weight-bold);
+    white-space: nowrap;
+    transition: all 0.3s ease;
+}
+
+.version-badge:hover {
+    background-color: var(--color-primary-hover);
+    box-shadow: 0 0 8px rgba(var(--color-teal-500-rgb), 0.5);
+}
+
 /* ===== NAVBAR CONTROLS ===== */
 
 .navbar-controls {
@@ -2221,12 +2237,17 @@ input[type=range]::-moz-range-thumb {
     .app-footer {
         bottom: 20px; /* Push it higher on mobile to avoid "Install App" banners */
         width: 85%;
+        padding: var(--space-6) var(--space-12);
         border-radius: var(--radius-lg); /* Slightly more square on mobile */
     }
     
     .footer-content {
         flex-direction: column; /* Stack text on mobile */
-        gap: var(--space-4);
+        gap: var(--space-2);
+    }
+
+    .app-footer p {
+        font-size: 10px;
     }
 
     .ownership-status {
