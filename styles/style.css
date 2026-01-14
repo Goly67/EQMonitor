@@ -1915,7 +1915,7 @@ input[type=range]::-moz-range-thumb {
     animation: flashCircle 1s infinite alternate;
 }
 
-/* PWA INSTALL CARD */
+/* PWA INSTALL CARD - MODERN MODAL */
 .pwa-install-card {
   position: fixed;
   inset: 0;
@@ -1924,53 +1924,208 @@ input[type=range]::-moz-range-thumb {
   justify-content: center;
   padding: 16px;
   z-index: 2500;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(10px);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  animation: fadeInOverlay 0.3s ease-out;
+}
+
+.pwa-install-card.active {
+  display: flex;
+  animation: fadeInOverlay 0.3s ease-out;
+}
+
+.pwa-install-card.closing {
+  animation: fadeOutOverlay 0.3s ease-in forwards;
+}
+
+.pwa-install-card.closing .pwa-install-card-inner {
+  animation: pwaCardOut 0.3s cubic-bezier(0.32, 0, 0.67, 0) forwards;
 }
 
 .pwa-install-card-inner {
   width: 100%;
-  max-width: 420px;
+  max-width: 480px;
   background: var(--color-surface);
-  border-radius: 16px;
+  border-radius: 20px;
   border: 1px solid var(--color-card-border);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
-  padding: 20px 18px 16px 18px;
-  animation: pwaCardIn 0.25s var(--ease-standard);
+  box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.3),
+    0 0 1px rgba(0, 0, 0, 0.1);
+  padding: 32px 24px 28px 24px;
+  animation: pwaCardIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Light mode specific styling */
+@media (prefers-color-scheme: light) {
+  .pwa-install-card {
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  .pwa-install-card-inner {
+    background: linear-gradient(135deg, rgba(252, 252, 249, 1) 0%, rgba(255, 255, 253, 1) 100%);
+    box-shadow: 
+      0 20px 60px rgba(0, 0, 0, 0.15),
+      0 0 1px rgba(0, 0, 0, 0.1);
+  }
+}
+
+/* Dark mode specific styling */
+@media (prefers-color-scheme: dark) {
+  .pwa-install-card {
+    background: rgba(0, 0, 0, 0.8);
+  }
+
+  .pwa-install-card-inner {
+    background: linear-gradient(135deg, rgba(38, 40, 40, 1) 0%, rgba(31, 33, 33, 1) 100%);
+    box-shadow: 
+      0 20px 60px rgba(0, 0, 0, 0.8),
+      0 0 1px rgba(255, 255, 255, 0.05);
+  }
+}
+
+/* Manual theme override */
+[data-color-scheme="light"] .pwa-install-card {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+[data-color-scheme="light"] .pwa-install-card-inner {
+  background: linear-gradient(135deg, rgba(252, 252, 249, 1) 0%, rgba(255, 255, 253, 1) 100%);
+}
+
+[data-color-scheme="dark"] .pwa-install-card {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+[data-color-scheme="dark"] .pwa-install-card-inner {
+  background: linear-gradient(135deg, rgba(38, 40, 40, 1) 0%, rgba(31, 33, 33, 1) 100%);
 }
 
 .pwa-install-title {
-  font-size: var(--font-size-lg);
-  margin: 0 0 8px 0;
+  font-size: var(--font-size-2xl);
+  margin: 0 0 12px 0;
   font-weight: var(--font-weight-bold);
   color: var(--color-text);
+  line-height: var(--line-height-tight);
 }
 
 .pwa-install-text {
-  font-size: var(--font-size-sm);
-  margin: 0 0 16px 0;
+  font-size: var(--font-size-base);
+  margin: 0 0 24px 0;
   color: var(--color-text-secondary);
+  line-height: var(--line-height-normal);
 }
 
 .pwa-install-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
-.pwa-install-actions .btn {
-  min-height: 40px;
+/* Primary button - HIGHLIGHTED */
+#pwaInstallBtn {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
+  color: var(--color-btn-primary-text);
+  border: none;
+  padding: 14px 20px;
+  min-height: 48px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(33, 128, 141, 0.3);
+  border: 1px solid rgba(33, 128, 141, 0.5);
 }
 
-/* narrow phones: make it feel like a bottom sheet */
+#pwaInstallBtn:hover {
+  background: linear-gradient(135deg, var(--color-primary-hover) 0%, var(--color-primary-active) 100%);
+  box-shadow: 0 6px 25px rgba(33, 128, 141, 0.4);
+  transform: translateY(-2px);
+}
+
+#pwaInstallBtn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 10px rgba(33, 128, 141, 0.3);
+}
+
+#pwaInstallBtn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Secondary button - NOT HIGHLIGHTED */
+#pwaInstallLater {
+  background: rgba(var(--color-slate-500-rgb), 0.1);
+  color: var(--color-text);
+  border: 1px solid rgba(var(--color-slate-500-rgb), 0.2);
+  padding: 12px 20px;
+  min-height: 44px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+#pwaInstallLater:hover {
+  background: rgba(var(--color-slate-500-rgb), 0.15);
+  border-color: rgba(var(--color-slate-500-rgb), 0.3);
+}
+
+#pwaInstallLater:active {
+  background: rgba(var(--color-slate-500-rgb), 0.2);
+}
+
+#pwaInstallLater:focus-visible {
+  outline: 2px solid var(--color-text-secondary);
+  outline-offset: 2px;
+}
+
+/* Dark mode button adjustments */
+@media (prefers-color-scheme: dark) {
+  #pwaInstallBtn {
+    box-shadow: 0 4px 15px rgba(33, 128, 141, 0.25);
+  }
+
+  #pwaInstallBtn:hover {
+    box-shadow: 0 6px 25px rgba(33, 128, 141, 0.35);
+  }
+
+  #pwaInstallLater {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  #pwaInstallLater:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+}
+
+/* narrow phones: maintain good spacing */
 @media (max-width: 480px) {
   .pwa-install-card {
-    align-items: center; /* was flex-end */
-    justify-content: center;
+    padding: 12px;
   }
 
   .pwa-install-card-inner {
-    border-radius: 16px; /* remove bottom-sheet look */
+    padding: 24px 20px 20px 20px;
+  }
+
+  .pwa-install-title {
+    font-size: var(--font-size-xl);
+  }
+
+  .pwa-install-text {
+    font-size: 13px;
+    margin: 0 0 20px 0;
+  }
+
+  #pwaInstallBtn,
+  #pwaInstallLater {
+    min-height: 44px;
   }
 }
 
@@ -1978,11 +2133,40 @@ input[type=range]::-moz-range-thumb {
 @keyframes pwaCardIn {
   from {
     opacity: 0;
-    transform: translateY(20px) scale(0.98);
+    transform: translateY(30px) scale(0.95);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeInOverlay {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pwaCardOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+}
+
+@keyframes fadeOutOverlay {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 

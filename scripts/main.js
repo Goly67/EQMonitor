@@ -2925,6 +2925,22 @@ window.addEventListener("click", async function handleFirstClick() {
 
 let deferredPrompt = null;
 
+/**
+ * Close modal with closing animation
+ */
+function closeModalWithAnimation(card) {
+    if (!card) return;
+    
+    // Add closing class to trigger animation
+    card.classList.add("closing");
+    
+    // Remove after animation completes (300ms)
+    setTimeout(() => {
+        card.classList.remove("closing");
+        card.classList.remove("active");
+    }, 300);
+}
+
 function initPWAInstallCard() {
     const card = document.getElementById("pwaInstallCard");
     const installBtn = document.getElementById("pwaInstallBtn");
@@ -2937,7 +2953,7 @@ function initPWAInstallCard() {
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
 
     if (isMobile && !isStandalone) {
-        card.style.display = "flex";
+        card.classList.add("active");
         installBtn.textContent = "Checking compatibility...";
         installBtn.disabled = true;
 
@@ -2954,7 +2970,7 @@ function initPWAInstallCard() {
     window.addEventListener("beforeinstallprompt", (e) => {
         e.preventDefault();
         deferredPrompt = e;
-        card.style.display = "flex";
+        card.classList.add("active");
         installBtn.disabled = false;
         installBtn.textContent = "Install App";
     });
@@ -2968,7 +2984,7 @@ function initPWAInstallCard() {
             deferredPrompt.prompt();
             const { outcome } = await deferredPrompt.userChoice;
             if (outcome === 'accepted') {
-                card.style.display = 'none';
+                closeModalWithAnimation(card);
             }
             deferredPrompt = null;
             return;
@@ -2983,7 +2999,7 @@ function initPWAInstallCard() {
 
     laterBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        card.style.display = "none";
+        closeModalWithAnimation(card);
     });
 }
 
@@ -3006,6 +3022,7 @@ if ('serviceWorker' in navigator) {
     }
     initNotificationSystem(); // Initialize push notifications
     initPresenceTracking();
+    initPWAInstallCard(); // Initialize PWA install modal
     fetchNewEvents(); // initial load
 
     // No SSE — just use regular polling
