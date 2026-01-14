@@ -459,7 +459,19 @@ function getCoverageDistance(mag) {
 /************************************************************************
  * MAP
  ************************************************************************/
-const map = L.map("map").setView([12.879721, 121.774017], 6);
+// Set max bounds to restrict map view to Philippines area only
+const philippinesMaxBounds = L.latLngBounds(
+    L.latLng(2, 114),    // Southwest corner (south, west)
+    L.latLng(22, 136)    // Northeast corner (north, east)
+);
+
+const map = L.map("map", {
+    maxBounds: philippinesMaxBounds,
+    maxBoundsViscosity: 1.0, // Prevent bouncing back when dragging outside bounds
+    minZoom: 5, // Minimum zoom level - prevents zooming out to see the world
+    maxZoom: 18 // Maximum zoom level for detailed viewing
+}).setView([13.4, 121.8], 6); // Centered on Marinduque - center of Philippines
+
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     preferCanvas: true,
     maxZoom: 18,
@@ -2266,7 +2278,8 @@ const savedPref = localStorage.getItem('userLocationPreference');
 const locationAlreadyGranted = savedPerm === 'granted' || savedPref === 'allowed';
 
 if (locationAlreadyGranted) {
-
+    // Request current location silently and continue initializing the rest of the script.
+    // Do NOT return here — we need the remaining initialization (event listeners, panels, etc.) to run.
     requestLocationPermission(false).catch(err => console.warn('Silent location fetch failed:', err));
 }
 
