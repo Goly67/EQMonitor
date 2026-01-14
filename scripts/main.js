@@ -2263,10 +2263,10 @@ window.addEventListener("resize", handleMagnitudeLabelsResponsive);
 // If already granted before, do NOT show the bottom bar again
 const savedPerm = localStorage.getItem('locationPermission');
 const savedPref = localStorage.getItem('userLocationPreference');
+const locationAlreadyGranted = savedPerm === 'granted' || savedPref === 'allowed';
 
-if (savedPerm === 'granted' || savedPref === 'allowed') {
-    // Request current location silently and continue initializing the rest of the script.
-    // Do NOT return here — we need the remaining initialization (event listeners, panels, etc.) to run.
+if (locationAlreadyGranted) {
+
     requestLocationPermission(false).catch(err => console.warn('Silent location fetch failed:', err));
 }
 
@@ -2987,7 +2987,10 @@ if ('serviceWorker' in navigator) {
 (function init() {
     currentRange = getDateRange("today");
     limitMarkers();
-    initLocationButton();
+    // Only show location bar if permission was not already granted
+    if (!locationAlreadyGranted) {
+        initLocationButton();
+    }
     initNotificationSystem(); // Initialize push notifications
     initPresenceTracking();
     fetchNewEvents(); // initial load
