@@ -2819,7 +2819,7 @@ legend.onAdd = function (map) {
     const headerGap = isMobile ? 10 : 6;
 
     const padding = isMobile ? "10px 12px" : "10px 14px";
-    const maxHeight = isMobile ? "30vh" : "auto";
+    const maxHeight = isMobile ? "auto" : "auto";
     const maxWidth = isMobile ? "55vw" : "220px";
 
     div.style.background = "var(--color-surface)";
@@ -2831,7 +2831,7 @@ legend.onAdd = function (map) {
     div.style.color = "var(--color-text)";
     div.style.maxWidth = maxWidth;
     div.style.maxHeight = maxHeight;
-    div.style.overflowY = "auto";
+    div.style.overflowY = "visible";
     div.style.marginBottom = isMobile ? "15px" : "0";
     div.style.marginRight = isMobile ? "10px" : "0";
     div.style.position = "relative";
