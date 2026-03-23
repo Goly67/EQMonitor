@@ -11,6 +11,140 @@ let serviceWorkerRegistration = null;
 let lastNotifiedEarthquakeId = null;
 let lastUpdateTime = Date.now();
 
+// ===== ACTIVE FAULT TRACKING =====
+// Map to track earthquakes by location (latitude/longitude rounded to 0.1 precision)
+const locationQuakeMap = new Map(); // key: "lat,lon", value: { count, earthquakes: [], active: true }
+const activeFaultBanner = document.getElementById('activeFaultBanner');
+const activeFaultMessage = document.getElementById('activeFaultMessage');
+const activeFaultClose = document.getElementById('activeFaultClose');
+let currentActiveFault = null; // Track which fault is currently shown
+
+// Helper function to get location key (round to 0.1 precision to group nearby earthquakes)
+function getLocationKey(lat, lon) {
+    const precision = 0.1;
+    const roundLat = Math.round(lat / precision) * precision;
+    const roundLon = Math.round(lon / precision) * precision;
+    return `${roundLat.toFixed(1)},${roundLon.toFixed(1)}`;
+}
+
+// Track earthquake and check if it triggers active fault announcement
+function trackEarthquakeLocation(ev) {
+    if (!ev.lat || !ev.lon) return;
+    
+    const key = getLocationKey(ev.lat, ev.lon);
+    let locationData = locationQuakeMap.get(key);
+    
+    if (!locationData) {
+        locationData = { count: 0, earthquakes: [], active: false, lat: ev.lat, lon: ev.lon };
+        locationQuakeMap.set(key, locationData);
+    }
+    
+    locationData.count++;
+    locationData.earthquakes.push({
+        id: ev.id,
+        time: ev.time,
+        magnitude: ev.magnitude,
+        location: ev.location
+    });
+    
+    // Keep only last 10 earthquakes per location
+    if (locationData.earthquakes.length > 10) {
+        locationData.earthquakes.shift();
+    }
+    
+    // Show announcement if 4 or more earthquakes at this location
+    if (locationData.count >= 4 && !locationData.active) {
+        locationData.active = true;
+        showActiveFaultBanner(locationData, key);
+    } else if (locationData.count >= 4 && locationData.active) {
+        // Update existing banner with latest data
+        updateActiveFaultBanner(locationData);
+    }
+}
+
+// Function to format time for display
+function formatActiveFaultTime(isoTime) {
+    try {
+        const date = new Date(isoTime);
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        const day = date.getDate();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        return `${month}/${day} ${hours}:${minutes}`;
+    } catch {
+        return 'Unknown';
+    }
+}
+
+// Show active fault banner
+function showActiveFaultBanner(locationData, locationKey) {
+    if (currentActiveFault) {
+        closeActiveFaultBanner();
+    }
+    
+    currentActiveFault = { locationKey, locationData };
+    
+    const latestQuake = locationData.earthquakes[locationData.earthquakes.length - 1];
+    const timeStr = formatActiveFaultTime(latestQuake.time);
+    const magStr = latestQuake.magnitude.toFixed(1);
+    
+    activeFaultMessage.textContent = `${locationData.count} earthquakes • ${timeStr} M${magStr} • Click to view`;
+    
+    activeFaultBanner.style.display = 'block';
+    activeFaultBanner.classList.remove('closing');
+    void activeFaultBanner.offsetWidth; // Force reflow
+    activeFaultBanner.classList.add('active');
+}
+
+// Update existing active fault banner
+function updateActiveFaultBanner(locationData) {
+    const latestQuake = locationData.earthquakes[locationData.earthquakes.length - 1];
+    const timeStr = formatActiveFaultTime(latestQuake.time);
+    const magStr = latestQuake.magnitude.toFixed(1);
+    
+    activeFaultMessage.textContent = `${locationData.count} earthquakes • ${timeStr} M${magStr} • Click to view`;
+}
+
+// Close active fault banner
+function closeActiveFaultBanner() {
+    if (!activeFaultBanner || !activeFaultBanner.classList.contains('active')) return;
+    
+    activeFaultBanner.classList.remove('active');
+    activeFaultBanner.classList.add('closing');
+    
+    const onAnimationEnd = () => {
+        activeFaultBanner.style.display = 'none';
+        activeFaultBanner.classList.remove('closing');
+        activeFaultBanner.removeEventListener('animationend', onAnimationEnd);
+    };
+    
+    activeFaultBanner.addEventListener('animationend', onAnimationEnd);
+    currentActiveFault = null;
+}
+
+// Event listeners for banner
+if (activeFaultClose) {
+    activeFaultClose.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeActiveFaultBanner();
+    });
+}
+
+if (activeFaultBanner) {
+    activeFaultBanner.addEventListener('click', (e) => {
+        if (e.target === activeFaultClose) return;
+        
+        // Fly to the active fault location
+        if (currentActiveFault) {
+            const { locationData } = currentActiveFault;
+            map.flyTo([locationData.lat, locationData.lon], 12, {
+                duration: 1.5
+            });
+        }
+        e.stopPropagation();
+    });
+}
+
 // Function to mark when data was last updated
 function markUpdate() {
     lastUpdateTime = Date.now();
@@ -196,35 +330,190 @@ const presencePanelClose = document.getElementById("presencePanelClose");
 const presencePanelContent = document.getElementById("presencePanelContent");
 const presenceCountEl = document.getElementById("presenceCount");
 
-const sessionsRef = firebase.database().ref("sessions"); // count liv
+const sessionsRef = firebase.database().ref("sessions"); // count live
+const presenceMarkers = new Map();
+
+const ADMIN_SECRET_CODE = "EQMONITOR_ADMIN_2026";
+let isAdmin = localStorage.getItem("isAdmin") === "true";
+
+// Unique viewer id persisted per browser
+let viewerId = localStorage.getItem("viewerId");
+if (!viewerId) {
+    viewerId = crypto.randomUUID();
+    localStorage.setItem("viewerId", viewerId);
+}
+
+let viewerName = localStorage.getItem("viewerName");
+if (!viewerName) {
+    viewerName = window.prompt("Enter your display name for live presence (friends only):", "Guest") || "Guest";
+    localStorage.setItem("viewerName", viewerName);
+}
+
+// For admin access only via special URL
+const adminPathSegment = "/admin-panel";
+const normalizedPath = window.location.pathname.replace(/\/+$/, "");
+const hasAdminPath = normalizedPath === adminPathSegment || normalizedPath.endsWith(adminPathSegment);
+const hasAdminQuery = new URLSearchParams(window.location.search).has("admin-panel");
+const hasAdminHash = window.location.hash.replace(/^#/, "") === "admin-panel";
+const isAdminPage = hasAdminPath || hasAdminQuery || hasAdminHash;
+
+if (!isAdmin && isAdminPage) {
+    const code = window.prompt("Admin mode: enter password to see all user locations:", "");
+    if (code === ADMIN_SECRET_CODE) {
+        isAdmin = true;
+        localStorage.setItem("isAdmin", "true");
+        viewerName = "Admin";
+    } else {
+        alert("Admin code incorrect or canceled. Proceeding as normal user.");
+    }
+}
+
+let viewerLocation = null;
+
+function buildPresencePanel(sessions) {
+    const allEntries = Object.entries(sessions || {});
+
+    if (!isAdmin) {
+        const myEntry = sessions[viewerId] ? [[viewerId, sessions[viewerId]]] : [];
+        if (myEntry.length === 0) {
+            presencePanelContent.innerHTML = '<div class="presence-panel-empty">No location active yet.</div>';
+            return;
+        }
+        const [id, s] = myEntry[0];
+        const ageSec = Math.floor((Date.now() - (s.lastSeen || 0)) / 1000);
+        const locText = (s.lat != null && s.lon != null) ? `${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}` : "location unknown";
+        presencePanelContent.innerHTML = `<div class="presence-item presence-self"><strong>You</strong> · ${locText} · active ${ageSec}s ago</div>`;
+        return;
+    }
+
+    if (allEntries.length === 0) {
+        presencePanelContent.innerHTML = '<div class="presence-panel-empty">No one else is viewing right now.</div>';
+        return;
+    }
+
+    const now = Date.now();
+    const rows = allEntries.map(([id, s]) => {
+        const ageSec = Math.floor((now - (s.lastSeen || 0)) / 1000);
+        const locText = (s.lat != null && s.lon != null) ? `${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}` : "location unknown";
+        const name = id === viewerId ? "You" : (s.displayName || "Unknown");
+        const selfTag = id === viewerId ? " (you)" : "";
+        return `<div class="presence-item${id === viewerId ? " presence-self" : ""}"><strong>${name}</strong>${selfTag} · ${locText} · active ${ageSec}s ago</div>`;
+    });
+
+    presencePanelContent.innerHTML = rows.join("");
+}
+
+function refreshPresenceMarkers(sessions) {
+    presenceMarkers.forEach(marker => map.removeLayer(marker));
+    presenceMarkers.clear();
+
+    const targetSessions = isAdmin ? sessions : {[viewerId]: sessions[viewerId]};
+
+    Object.entries(targetSessions || {}).forEach(([id, s]) => {
+        if (!s || s.lat == null || s.lon == null) return;
+
+        try {
+            const marker = L.circleMarker([s.lat, s.lon], {
+                radius: id === viewerId ? 9 : 6,
+                fillColor: id === viewerId ? "#0047AB" : "#EF6631",
+                color: "#ffffff",
+                weight: 1,
+                fillOpacity: 0.9,
+                opacity: 0.9
+            }).addTo(map);
+
+            const nameLabel = id === viewerId ? "You" : (s.displayName || "Friend");
+            marker.bindPopup(`<strong>${nameLabel}</strong><br/>${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}<br/>Last active: ${new Date(s.lastSeen || 0).toLocaleTimeString()}`);
+            presenceMarkers.set(id, marker);
+        } catch (err) {
+            console.warn("Presence marker failed:", err);
+        }
+    });
+}
+
+function updateMySession(lat, lon) {
+    viewerLocation = { lat, lon };
+    const sessionData = {
+        firstSeen: Date.now(),
+        lastSeen: Date.now(),
+        status: "online",
+        displayName: viewerName || "Guest",
+        role: isAdmin ? "admin" : "member",
+        lat: Number(lat),
+        lon: Number(lon)
+    };
+
+    const targetRef = presenceSessionRef || sessionsRef.child(viewerId);
+    targetRef.set(sessionData).catch(err => console.error("Failed updating session", err));
+}
+
+function updateLastSeenOnly() {
+    const updates = {
+        lastSeen: Date.now(),
+        displayName: viewerName || "Guest",
+        status: "online",
+        role: isAdmin ? "admin" : "member"
+    };
+
+    const targetRef = presenceSessionRef || sessionsRef.child(viewerId);
+    targetRef.update(updates).catch(err => console.error("Failed updating last seen", err));
+}
+
+// Presence listener + map markers
 sessionsRef.on("value", snap => {
     const sessions = snap.val() || {};
     const now = Date.now();
     const cutoff = now - 5 * 60 * 1000; // 5 minutes
 
-    let activeCount = 0;
-
-    for (const [id, s] of Object.entries(sessions)) {
-        const lastSeen = s.lastSeen || 0;
-
-        // Remove very old sessions
-        if (lastSeen < cutoff) {
+    const activeSessions = {};
+    Object.entries(sessions).forEach(([id, s]) => {
+        if ((s.lastSeen || 0) < cutoff) {
             sessionsRef.child(id).remove();
-            continue;
+            return;
         }
+        activeSessions[id] = s;
+    });
 
-        // Only count recent sessions as active viewers
-        activeCount++;
+    let activeCount = Object.keys(activeSessions).length;
+    if (!isAdmin) {
+        activeCount = activeSessions[viewerId] ? 1 : 0;
     }
-
     if (presenceCountEl) {
         presenceCountEl.textContent = activeCount;
     }
 
+    buildPresencePanel(activeSessions);
+    refreshPresenceMarkers(activeSessions);
 });
 
-// Unique viewer id persisted per browser
-let viewerId = localStorage.getItem("viewerId");
+// Regular heartbeat for our own session
+setInterval(() => {
+    if (viewerLocation) {
+        updateMySession(viewerLocation.lat, viewerLocation.lon);
+    } else {
+        updateLastSeenOnly();
+    }
+}, 20 * 1000);
+
+// Remove session on unload
+window.addEventListener("beforeunload", () => {
+    sessionsRef.child(viewerId).remove();
+});
+
+// Attempt to get geolocation
+if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(position => {
+        updateMySession(position.coords.latitude, position.coords.longitude);
+    }, err => {
+        console.warn("Geolocation failed:", err);
+        // write presence without location if denied
+        updateLastSeenOnly();
+    }, { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 });
+} else {
+    console.warn("Geolocation not supported in this browser.");
+    updateLastSeenOnly();
+}
+
 if (!viewerId) {
     viewerId = crypto.randomUUID();
     localStorage.setItem("viewerId", viewerId);
@@ -660,6 +949,9 @@ function formatDateTime(dt) {
 
 function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
     if (!ev.lat || !ev.lon) return;
+
+    // Track earthquake location for active fault detection
+    trackEarthquakeLocation(ev);
 
     if (markers.has(ev.id)) return;
 
@@ -1280,87 +1572,16 @@ function formatPresenceRelativeTime(pastMs) {
  * Render the presence list into the panel and update the count button.
  */
 function renderPresence(sessions) {
-    const entries = Object.entries(sessions || {});
-    if (!presenceCountEl || !presencePanelContent) return;
+    const allSessions = sessions || {};
 
-    const now = Date.now();
+    // Show panel and map markers with location if provided.
+    buildPresencePanel(allSessions);
+    refreshPresenceMarkers(allSessions);
 
-    // Count all online viewers
-    const onlineCount = entries.filter(([, s]) => s.status === "online").length;
-    presenceCountEl.textContent = onlineCount.toString();
+    if (!presenceCountEl) return;
 
-    if (!entries.length) {
-        presencePanelContent.innerHTML =
-            '<div class="presence-panel-empty">No one else is viewing right now.</div>';
-        return;
-    }
-
-    // Separate self, others online, and offline
-    const selfEntry = entries.find(([id]) => id === viewerId);
-    const otherEntries = entries.filter(([id]) => id !== viewerId);
-
-    const onlineUsers = otherEntries.filter(([, s]) => s.status === "online");
-    const offlineUsers = otherEntries.filter(([, s]) => s.status !== "online");
-
-    // Sort online: newest first
-    onlineUsers.sort(([, a], [, b]) => {
-        const aTime = a.firstSeen || 0;
-        const bTime = b.firstSeen || 0;
-        return bTime - aTime;
-    });
-
-    // Sort offline: newest first
-    offlineUsers.sort(([, a], [, b]) => {
-        const aTime = a.lastSeen || 0;
-        const bTime = b.lastSeen || 0;
-        return bTime - aTime;
-    });
-
-    // Combine final list: self at top, then others online, then offline
-    const sortedEntries = [];
-    if (selfEntry) sortedEntries.push(selfEntry); // self first
-    sortedEntries.push(...onlineUsers);
-    sortedEntries.push(...offlineUsers);
-
-    let html = "";
-
-    for (const [id, s] of sortedEntries) {
-        const isSelf = id === viewerId;
-
-        const firstSeenMs = s.firstSeen || s.lastSeen || now;
-        const lastSeenMs = s.lastSeen || s.firstSeen || now;
-
-        const viewedAtText = formatDateTime(new Date(firstSeenMs).toISOString());
-        const lastSeenText = formatDateTime(new Date(lastSeenMs).toISOString());
-
-        const isOnline = s.status === "online";
-
-        let titleLine;
-        let statusLine;
-
-        if (isSelf) {
-            titleLine = "You viewed the website!";
-            statusLine = `Status: Online now <br> Viewing since ${viewedAtText} <br>`;
-        } else if (isOnline) {
-            titleLine = `A user viewed the website!`;
-            statusLine = `Status: Online now <br> Viewing since ${viewedAtText} <br>`;
-        } else {
-            const ago = formatPresenceRelativeTime(lastSeenMs);
-            titleLine = `A user viewed the website ${ago} ago.`;
-            statusLine = `Status: Offline <br> Last seen on ${lastSeenText}`;
-        }
-
-        html += `
-      <div class="presence-item ${isSelf ? "self" : ""}">
-        <div>${titleLine}</div>
-        <div class="presence-item-status">
-          ${statusLine}
-        </div>
-      </div>
-    `;
-    }
-
-    presencePanelContent.innerHTML = html;
+    const activeCount = Object.keys(allSessions).length;
+    presenceCountEl.textContent = activeCount.toString();
 }
 
 
@@ -1379,31 +1600,50 @@ function initPresenceTracking() {
     presenceSessionRef = db.ref("sessions/" + viewerId);
     const now = Date.now();
 
-    // Set initial session data
+    // Set initial session data with proper error handling
     presenceSessionRef
         .set({
             firstSeen: now,
             lastSeen: now,
-            status: "online"
+            status: "online",
+            displayName: viewerName || "Guest",
+            role: isAdmin ? "admin" : "member",
+            lat: viewerLocation ? viewerLocation.lat : null,
+            lon: viewerLocation ? viewerLocation.lon : null
         })
-        .catch((err) => console.warn("Presence set error:", err));
+        .catch((err) => {
+            console.error("[Presence] Failed to set initial session data:", err);
+            if (err.code === 'PERMISSION_DENIED') {
+                console.error('[Presence] Permission denied - check Firebase Rules');
+            }
+        });
 
-    // Ensure status switches to offline on disconnect
+    // Ensure status switches to offline on disconnect with error handling
     presenceSessionRef
         .onDisconnect()
         .update({
             lastSeen: firebase.database.ServerValue.TIMESTAMP,
             status: "offline"
         })
-        .catch(() => { });
+        .catch((err) => {
+            console.error("[Presence] Failed to set disconnect handler:", err);
+        });
 
     // Heartbeat to keep lastSeen fresh while the tab is open
     presenceHeartbeat = setInterval(() => {
+        const dataUpdate = {
+            lastSeen: Date.now(),
+            status: "online",
+            displayName: viewerName || "Guest",
+            role: isAdmin ? "admin" : "member"
+        };
+        if (viewerLocation) {
+            dataUpdate.lat = viewerLocation.lat;
+            dataUpdate.lon = viewerLocation.lon;
+        }
+
         presenceSessionRef
-            .update({
-                lastSeen: Date.now(),
-                status: "online"
-            })
+            .update(dataUpdate)
             .catch(() => { });
     }, 20000); // 20s
 
@@ -1987,16 +2227,21 @@ function setStatus(msg) {
 
 // Test quake button
 document.getElementById("btnTestQuake").addEventListener("click", () => {
+    // Fixed test location to allow banner to appear after 4 clicks
+    const testLat = 12.8797;
+    const testLon = 121.7740;
+    
     const testEv = {
         id: "TEST_" + Date.now(),
-        lat: 12.8797 + (Math.random() - 0.5) * 2,
-        lon: 121.7740 + (Math.random() - 0.5) * 2,
+        lat: testLat,
+        lon: testLon,
         magnitude: 4 + Math.random() * 3,
         depth: 10 + Math.random() * 50,
         time: new Date().toISOString(),
-        location: "Test Location"
+        location: "Test Active Fault Zone"
     };
     addOrUpdateEventMarker(normalizeEvent(testEv), true);
+    console.log("Test earthquake added. Click 4 times total at same location to see Active Fault banner.");
 });
 
 // Dynamic poll interval selector
