@@ -316,6 +316,42 @@ window.addEventListener('resize', function () {
     }
 });
 
+// Admin access button
+const adminBtn = document.createElement('button');
+adminBtn.textContent = 'Enter Admin Password';
+adminBtn.style.cssText = 'width: 100%; margin: 10px 0;';
+adminBtn.addEventListener('click', () => {
+    if (!firebase.auth) {
+        alert("Firebase Auth not available. Please check Firebase configuration.");
+        return;
+    }
+    const googleProvider = new firebase.auth.GoogleAuthProvider();
+    firebase.auth().signInWithPopup(googleProvider).then((result) => {
+        const user = result.user;
+        // Replace with your authorized email(s)
+        const allowedEmails = ['tifys587@gmail.com'];
+        if (allowedEmails.includes(user.email)) {
+            isAdmin = true;
+            localStorage.setItem("isAdmin", "true");
+            viewerName = "Admin";
+            updateLastSeenOnly(); // Update session with new name
+            // Refresh the presence panel
+            sessionsRef.once('value', snap => {
+                const sessions = snap.val() || {};
+                buildPresencePanel(sessions);
+                refreshPresenceMarkers(sessions);
+            });
+        } else {
+            alert("Not authorized for admin access.");
+            firebase.auth().signOut();
+        }
+    }).catch((error) => {
+        console.error("Sign in failed:", error);
+        alert("Sign in failed. Please try again.");
+    });
+});
+panel.appendChild(adminBtn);
+
 // NOTIFICATION SYSTEM - FINAL WORKING VERSION
 const notificationBell = document.getElementById('notificationBell');
 const notificationPanel = document.getElementById('notificationPanel');
@@ -332,8 +368,6 @@ const presenceCountEl = document.getElementById("presenceCount");
 
 const sessionsRef = firebase.database().ref("sessions"); // count live
 const presenceMarkers = new Map();
-
-const ADMIN_SECRET_CODE = "EQMONITOR_ADMIN_2026";
 let isAdmin = localStorage.getItem("isAdmin") === "true";
 
 // Unique viewer id persisted per browser
@@ -343,24 +377,8 @@ if (!viewerId) {
     localStorage.setItem("viewerId", viewerId);
 }
 
-// For admin access only via special URL
-const adminPathSegment = "/admin-panel";
-const normalizedPath = window.location.pathname.replace(/\/+$/, "");
-const hasAdminPath = normalizedPath === adminPathSegment || normalizedPath.endsWith(adminPathSegment);
-const hasAdminQuery = new URLSearchParams(window.location.search).has("admin-panel");
-const hasAdminHash = window.location.hash.replace(/^#/, "") === "admin-panel";
-const isAdminPage = hasAdminPath || hasAdminQuery || hasAdminHash;
-
-if (!isAdmin && isAdminPage) {
-    const code = window.prompt("Admin mode: enter password to see all user locations:", "");
-    if (code === ADMIN_SECRET_CODE) {
-        isAdmin = true;
-        localStorage.setItem("isAdmin", "true");
-        viewerName = "Admin";
-    } else {
-        alert("Admin code incorrect or canceled. Proceeding as normal user.");
-    }
-}
+let viewerName = "Guest";
+localStorage.setItem("viewerName", viewerName);
 
 let viewerLocation = null;
 
@@ -416,7 +434,7 @@ function refreshPresenceMarkers(sessions) {
                 opacity: 0.9
             }).addTo(map);
 
-            const nameLabel = id === viewerId ? "You" : (s.displayName || "Friend");
+            const nameLabel = id === viewerId ? "You" : (s.displayName || "Guest");
             marker.bindPopup(`<strong>${nameLabel}</strong><br/>${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}<br/>Last active: ${new Date(s.lastSeen || 0).toLocaleTimeString()}`);
             presenceMarkers.set(id, marker);
         } catch (err) {
