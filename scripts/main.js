@@ -414,7 +414,9 @@ function buildPresencePanel(sessions) {
     }
 
     const now = Date.now();
-    const rows = allEntries.map(([id, s]) => {
+    // Sort entries by firstSeen descending (newest users first)
+    const sortedEntries = allEntries.sort((a, b) => (b[1].firstSeen || 0) - (a[1].firstSeen || 0));
+    const rows = sortedEntries.map(([id, s]) => {
         const ageSec = Math.floor((now - (s.lastSeen || 0)) / 1000);
         const locText = (s.lat != null && s.lon != null) ? `${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}` : "location unknown";
         const name = id === viewerId ? "You" : (s.displayName || "Unknown");
@@ -430,6 +432,9 @@ function refreshPresenceMarkers(sessions) {
     presenceMarkers.clear();
 
     const targetSessions = isAdmin ? sessions : {[viewerId]: sessions[viewerId]};
+
+    let latestMarker = null;
+    let latestTime = 0;
 
     Object.entries(targetSessions || {}).forEach(([id, s]) => {
         if (!s || s.lat == null || s.lon == null) return;
@@ -447,10 +452,21 @@ function refreshPresenceMarkers(sessions) {
             const nameLabel = id === viewerId ? "You" : (s.displayName || "Guest");
             marker.bindPopup(`<strong>${nameLabel}</strong><br/>${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}<br/>Last active: ${new Date(s.lastSeen || 0).toLocaleTimeString()}`);
             presenceMarkers.set(id, marker);
+
+            // Track the marker with the most recent join time (firstSeen)
+            if ((s.firstSeen || 0) > latestTime) {
+                latestTime = s.firstSeen || 0;
+                latestMarker = marker;
+            }
         } catch (err) {
             console.warn("Presence marker failed:", err);
         }
     });
+
+    // Bring the most recently active marker to the front
+    if (latestMarker) {
+        latestMarker.bringToFront();
+    }
 }
 
 function updateMySession(lat, lon) {
@@ -485,7 +501,7 @@ function updateLastSeenOnly() {
 sessionsRef.on("value", snap => {
     const sessions = snap.val() || {};
     const now = Date.now();
-    const cutoff = now - 5 * 60 * 1000; // 5 minutes
+    const cutoff = now - 1 * 60 * 1000; // 1 minute
 
     const activeSessions = {};
     Object.entries(sessions).forEach(([id, s]) => {
