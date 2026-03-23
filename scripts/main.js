@@ -343,12 +343,6 @@ if (!viewerId) {
     localStorage.setItem("viewerId", viewerId);
 }
 
-let viewerName = localStorage.getItem("viewerName");
-if (!viewerName) {
-    viewerName = window.prompt("IGNORE THIS NOTIFICATION, THIS IS FOR DEVELOPERS ONLY:", "Guest") || "Guest";
-    localStorage.setItem("viewerName", viewerName);
-}
-
 // For admin access only via special URL
 const adminPathSegment = "/admin-panel";
 const normalizedPath = window.location.pathname.replace(/\/+$/, "");
