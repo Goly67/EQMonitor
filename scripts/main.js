@@ -333,6 +333,7 @@ adminBtn.addEventListener('click', () => {
         if (allowedEmails.includes(user.email)) {
             isAdmin = true;
             localStorage.setItem("isAdmin", "true");
+            localStorage.setItem("adminLoginTime", Date.now().toString());
             viewerName = "Admin";
             updateLastSeenOnly(); // Update session with new name
             // Refresh the presence panel
@@ -369,6 +370,15 @@ const presenceCountEl = document.getElementById("presenceCount");
 const sessionsRef = firebase.database().ref("sessions"); // count live
 const presenceMarkers = new Map();
 let isAdmin = localStorage.getItem("isAdmin") === "true";
+
+// Check if admin login has expired (30 days)
+const adminLoginTime = localStorage.getItem("adminLoginTime");
+const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+if (adminLoginTime && Date.now() - parseInt(adminLoginTime) > thirtyDaysMs) {
+    localStorage.removeItem("isAdmin");
+    localStorage.removeItem("adminLoginTime");
+    isAdmin = false;
+}
 
 // Unique viewer id persisted per browser
 let viewerId = localStorage.getItem("viewerId");
