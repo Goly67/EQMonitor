@@ -318,7 +318,7 @@ window.addEventListener('resize', function () {
 
 // Admin access button
 const adminBtn = document.createElement('button');
-adminBtn.textContent = 'Enter Admin Password';
+adminBtn.textContent = 'Admin Panel';
 adminBtn.style.cssText = 'width: 100%; margin: 10px 0;';
 adminBtn.addEventListener('click', () => {
     if (!firebase.auth) {
