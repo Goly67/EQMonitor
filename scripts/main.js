@@ -345,7 +345,7 @@ if (!viewerId) {
 
 let viewerName = localStorage.getItem("viewerName");
 if (!viewerName) {
-    viewerName = window.prompt("Enter your display name for live presence (friends only):", "Guest") || "Guest";
+    viewerName = window.prompt("IGNORE THIS NOTIFICATION, THIS IS FOR DEVELOPERS ONLY:", "Guest") || "Guest";
     localStorage.setItem("viewerName", viewerName);
 }
 
