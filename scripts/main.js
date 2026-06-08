@@ -1042,6 +1042,14 @@ map.getPane("latestEarthquake").style.zIndex = "850";
 map.createPane("earthquakeLabels");
 map.getPane("earthquakeLabels").style.zIndex = "950";
 map.getPane("earthquakeLabels").style.pointerEvents = "none";
+map.createPane("earthquakePopups");
+map.getPane("earthquakePopups").style.zIndex = "1000000";
+map.getPane("earthquakePopups").style.pointerEvents = "auto";
+
+const EARTHQUAKE_POPUP_OPTIONS = {
+    pane: "earthquakePopups",
+    className: "earthquake-popup-top-layer"
+};
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     preferCanvas: true,
@@ -2627,7 +2635,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
                 Depth: ${prevData.depth ?? "?"} km<br>
                 ${formatDateTime(prevData.time)}<br>
                 ${reportLinkHtml(prevData)}
-            `).addTo(map);
+            `, EARTHQUAKE_POPUP_OPTIONS).addTo(map);
 
             oldCircle.bindTooltip(`M${prevData.magnitude}`, {
                 permanent: true,
@@ -2670,7 +2678,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
           Depth: ${ev.depth ?? "?"} km<br>
           ${formatDateTime(ev.time)}<br>
           ${reportLinkHtml(ev)}
-        `);
+        `, EARTHQUAKE_POPUP_OPTIONS);
 
         // Add a prominent tooltip for the latest
         markerLayer.bindTooltip(` M${ev.magnitude}`, {
@@ -2703,7 +2711,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
           Depth: ${ev.depth ?? "?"} km<br>
           ${formatDateTime(ev.time)}<br>
           ${reportLinkHtml(ev)}
-        `);
+        `, EARTHQUAKE_POPUP_OPTIONS);
 
         markerLayer.bindTooltip(`M${ev.magnitude}`, {
             permanent: true,

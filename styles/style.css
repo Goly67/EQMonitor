@@ -2013,6 +2013,16 @@ input[type=range]::-moz-range-thumb {
 
 /* ===== LEAFLET POPUP STYLING ===== */
 
+.leaflet-pane.leaflet-earthquakePopups-pane,
+.leaflet-popup.earthquake-popup-top-layer {
+    z-index: 1000000 !important;
+}
+
+.leaflet-popup.earthquake-popup-top-layer .leaflet-popup-content {
+    position: relative;
+    z-index: 1;
+}
+
 .leaflet-popup-content-wrapper {
     background: var(--color-surface) !important;
     border-radius: var(--radius-md) !important;
