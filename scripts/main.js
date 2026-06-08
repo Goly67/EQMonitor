@@ -1315,9 +1315,11 @@ function ensureMagnitudeTooltip(layer, ev, isLatest = false) {
 
     const label = `M${ev.magnitude}`;
     const className = isLatest ? "magnitude-label latest" : "magnitude-label";
+    const latestLabelOffset = Math.max(20, Math.round(magToRadius(Number(ev.magnitude) || 0) + 16));
     const options = {
         permanent: true,
-        direction: "center",
+        direction: isLatest ? "top" : "center",
+        offset: isLatest ? [0, -latestLabelOffset] : [0, 0],
         className,
         opacity: 1,
         pane: "earthquakeLabels"
@@ -1327,12 +1329,14 @@ function ensureMagnitudeTooltip(layer, ev, isLatest = false) {
     if (tooltip) {
         tooltip.setContent(label);
         tooltip.options.permanent = true;
-        tooltip.options.direction = "center";
+        tooltip.options.direction = options.direction;
+        tooltip.options.offset = options.offset;
         tooltip.options.opacity = 1;
         tooltip.options.pane = "earthquakeLabels";
         if (tooltip._container) {
             tooltip._container.classList.add("magnitude-label");
             tooltip._container.classList.toggle("latest", isLatest);
+            if (!isLatest) tooltip._container.classList.remove("latest-on-top");
         }
     } else {
         layer.bindTooltip(label, options);
@@ -1343,6 +1347,10 @@ function ensureMagnitudeTooltip(layer, ev, isLatest = false) {
     } catch (err) {
         console.warn("Failed to open magnitude tooltip:", err);
     }
+
+    const tooltipEl = layer.getTooltip?.()?._container;
+    if (tooltipEl && !isLatest) tooltipEl.classList.remove("latest-on-top");
+    requestAnimationFrame(handleMagnitudeLabelsResponsive);
 }
 
 function applyMarkerStacking(layer, isLatest = false) {
