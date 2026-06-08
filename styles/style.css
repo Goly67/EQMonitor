@@ -2801,7 +2801,7 @@ input[type=range]::-moz-range-thumb {
         padding: var(--space-10);
     }
 
-    .leaflet-tooltip.magnitude-label {
+    .leaflet-tooltip.magnitude-label:not(.latest):not(.latest-on-top) {
         display: none !important;
     }
 }

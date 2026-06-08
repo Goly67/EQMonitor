@@ -1270,6 +1270,9 @@ function ensureLatestMarkerOnTop() {
                 el.style.pointerEvents = "auto";
             }
 
+            const latestData = markers.get(markerLayer._eventId)?.data;
+            ensureMagnitudeTooltip(markerLayer, latestData, true);
+
             const tooltip = markerLayer.getTooltip();
             if (tooltip?._container) {
                 const tooltipPane = map.getPane("earthquakeLabels") || map.getPane("tooltipPane");
@@ -1305,6 +1308,41 @@ function getEventTimeMs(ev) {
 function getEventStackIndex(ev, isLatest = false) {
     const base = Math.floor(getEventTimeMs(ev) / 1000);
     return (isLatest ? 100000 : 1000) + (base % 800000);
+}
+
+function ensureMagnitudeTooltip(layer, ev, isLatest = false) {
+    if (!layer || !ev) return;
+
+    const label = `M${ev.magnitude}`;
+    const className = isLatest ? "magnitude-label latest" : "magnitude-label";
+    const options = {
+        permanent: true,
+        direction: "center",
+        className,
+        opacity: 1,
+        pane: "earthquakeLabels"
+    };
+
+    const tooltip = layer.getTooltip?.();
+    if (tooltip) {
+        tooltip.setContent(label);
+        tooltip.options.permanent = true;
+        tooltip.options.direction = "center";
+        tooltip.options.opacity = 1;
+        tooltip.options.pane = "earthquakeLabels";
+        if (tooltip._container) {
+            tooltip._container.classList.add("magnitude-label");
+            tooltip._container.classList.toggle("latest", isLatest);
+        }
+    } else {
+        layer.bindTooltip(label, options);
+    }
+
+    try {
+        layer.openTooltip();
+    } catch (err) {
+        console.warn("Failed to open magnitude tooltip:", err);
+    }
 }
 
 function applyMarkerStacking(layer, isLatest = false) {
@@ -2604,8 +2642,11 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
 
     // If already on map, just re-elevate when it's the latest
     if (markers.has(ev.id)) {
+        const existingLayer = markers.get(ev.id).layer;
+        ensureMagnitudeTooltip(existingLayer, ev, isLatest);
+        applyMarkerStacking(existingLayer, isLatest);
         if (isLatest) {
-            latestMarker = markers.get(ev.id).layer;
+            latestMarker = existingLayer;
             ensureLatestMarkerOnTop();
         }
         return;
@@ -2637,13 +2678,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
                 ${reportLinkHtml(prevData)}
             `, EARTHQUAKE_POPUP_OPTIONS).addTo(map);
 
-            oldCircle.bindTooltip(`M${prevData.magnitude}`, {
-                permanent: true,
-                direction: "center",
-                className: "magnitude-label",
-                opacity: 1,
-                pane: "earthquakeLabels"
-            });
+            ensureMagnitudeTooltip(oldCircle, prevData, false);
 
             // replace in the markers map
             markers.set(prevData.id, { layer: oldCircle, data: prevData });
@@ -2681,13 +2716,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
         `, EARTHQUAKE_POPUP_OPTIONS);
 
         // Add a prominent tooltip for the latest
-        markerLayer.bindTooltip(` M${ev.magnitude}`, {
-            permanent: true,
-            direction: "center",
-            className: "magnitude-label latest",
-            opacity: 1,
-            pane: "earthquakeLabels"
-        });
+        ensureMagnitudeTooltip(markerLayer, ev, true);
 
         // marker.getElement() returns the DIV; query the svg inside it:
         const el = markerLayer.getElement && markerLayer.getElement();
@@ -2713,13 +2742,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
           ${reportLinkHtml(ev)}
         `, EARTHQUAKE_POPUP_OPTIONS);
 
-        markerLayer.bindTooltip(`M${ev.magnitude}`, {
-            permanent: true,
-            direction: "center",
-            className: "magnitude-label",
-            opacity: 1,
-            pane: "earthquakeLabels"
-        });
+        ensureMagnitudeTooltip(markerLayer, ev, false);
     }
 
     // set housekeeping props and store
@@ -2766,7 +2789,8 @@ map.on("moveend", () => {
 function handleMagnitudeLabelsResponsive() {
     const isMobile = window.innerWidth <= 768;
     document.querySelectorAll(".leaflet-tooltip.magnitude-label").forEach(el => {
-        el.style.display = isMobile ? "none" : "block";
+        const isLatestLabel = el.classList.contains("latest") || el.classList.contains("latest-on-top");
+        el.style.display = isMobile && !isLatestLabel ? "none" : "block";
     });
 }
 
