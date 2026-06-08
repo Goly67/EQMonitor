@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "sessions": {
+      ".read": true,
+      "$uid": {
+        ".write": true
+      }
+    },
+    "announcements": {
+      ".read": true,
+      "current": {
+        ".write": "auth != null && auth.token.email == 'tifys587@gmail.com'"
+      }
+    }
+  }
+}

@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="utf-8" />
-  <meta name="version" content="EQ-0523S26" />
+  <meta name="version" content="EQ-0608S26" />
   <title>Earthquake Monitoring System</title>
   <link rel="icon" href="logo.png" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -50,7 +50,7 @@
   <div class="header-bar">
     <div style="display: flex; align-items: center; gap: 10px;">
       <h1 class="header-title">EQMonitor</h1>
-      <span class="version-badge">EQ-0523S26</span>
+      <span class="version-badge">EQ-0608S26</span>
     </div>
     <div class="navbar-controls">
       <button class="burger-menu-btn" id="burgerMenuBtn" title="Toggle menu">
@@ -70,16 +70,23 @@
     </div>
   </div>
 
-  <!-- Active Fault Announcement Banner -->
-  <div id="activeFaultBanner" class="active-fault-banner" style="display: none;">
-    <div class="active-fault-content">
-      <span class="active-fault-icon material-symbols-outlined">warning</span>
-      <div class="active-fault-text">
-        <span class="active-fault-label">ACTIVE FAULT:</span>
-        <span id="activeFaultMessage" class="active-fault-message"></span>
+  <!-- Admin announcement banner (below header) -->
+  <div id="adminAnnouncementBanner" class="admin-announcement-banner" hidden>
+    <div class="admin-announcement-glow"></div>
+    <div class="admin-announcement-inner">
+      <div class="admin-announcement-icon-wrap" aria-hidden="true">
+        <span class="admin-announcement-icon material-symbols-outlined">campaign</span>
       </div>
-      <button id="activeFaultClose" class="active-fault-close">&times;</button>
+      <div class="admin-announcement-body">
+        <span class="admin-announcement-label">Official Announcement</span>
+        <p id="adminAnnouncementMessage" class="admin-announcement-message"></p>
+      </div>
     </div>
+  </div>
+
+  <div id="adminNoticeToast" class="admin-notice-toast" role="status" aria-live="polite" hidden>
+    <span id="adminNoticeIcon" class="material-symbols-outlined admin-notice-icon">check_circle</span>
+    <span id="adminNoticeMessage" class="admin-notice-message"></span>
   </div>
 
   <!-- Menu overlay for mobile -->
@@ -116,6 +123,7 @@
     <label for="sourceSelector">Data Source</label>
     <select id="sourceSelector">
       <option value="phivolcs" selected>PHIVOLCS (Philippines)</option>
+      <option value="usgs">USGS (Philippines region)</option>
     </select>
 
     <hr>
@@ -157,11 +165,27 @@
     </select>
 
     <div class="status" id="status">Status: Initializing...</div>
+
+    <hr>
+
+    <button id="btnAdminLogin">Admin Login</button>
+    <button id="btnAdminLogout" hidden>Admin Logout</button>
+
+    <div id="adminSection" class="admin-section" hidden>
+      <h6>Admin Announcements</h6>
+      <label for="announcementInput">Message for all users</label>
+      <textarea id="announcementInput" rows="3" maxlength="500" placeholder="Type an announcement..."></textarea>
+      <div class="admin-announcement-actions">
+        <button id="btnPostAnnouncement">Post Announcement</button>
+        <button id="btnRemoveAnnouncement" class="btn-admin-secondary">Remove Announcement</button>
+      </div>
+    </div>
+
   </div>
 
   <footer class="app-footer">
   <div class="footer-content">
-    <p class="copyright">&copy; 2025 EQMonitor. All rights reserved.</p>
+    <p class="copyright">&copy; 2026 EQMonitor. All rights reserved.</p>
     <p class="ownership-status">Ownership claimed by <span class="owner-name">Sam Yujoco</span></p>
     <a class="btn btn--outline footer-privacy" href="privacy.html">Privacy Policy and Contact information</a>
   </div>

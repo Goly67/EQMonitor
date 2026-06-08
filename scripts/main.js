@@ -11,140 +11,6 @@ let serviceWorkerRegistration = null;
 let lastNotifiedEarthquakeId = null;
 let lastUpdateTime = Date.now();
 
-// ===== ACTIVE FAULT TRACKING =====
-// Map to track earthquakes by location (latitude/longitude rounded to 0.1 precision)
-const locationQuakeMap = new Map(); // key: "lat,lon", value: { count, earthquakes: [], active: true }
-const activeFaultBanner = document.getElementById('activeFaultBanner');
-const activeFaultMessage = document.getElementById('activeFaultMessage');
-const activeFaultClose = document.getElementById('activeFaultClose');
-let currentActiveFault = null; // Track which fault is currently shown
-
-// Helper function to get location key (round to 0.1 precision to group nearby earthquakes)
-function getLocationKey(lat, lon) {
-    const precision = 0.1;
-    const roundLat = Math.round(lat / precision) * precision;
-    const roundLon = Math.round(lon / precision) * precision;
-    return `${roundLat.toFixed(1)},${roundLon.toFixed(1)}`;
-}
-
-// Track earthquake and check if it triggers active fault announcement
-function trackEarthquakeLocation(ev) {
-    if (!ev.lat || !ev.lon) return;
-    
-    const key = getLocationKey(ev.lat, ev.lon);
-    let locationData = locationQuakeMap.get(key);
-    
-    if (!locationData) {
-        locationData = { count: 0, earthquakes: [], active: false, lat: ev.lat, lon: ev.lon };
-        locationQuakeMap.set(key, locationData);
-    }
-    
-    locationData.count++;
-    locationData.earthquakes.push({
-        id: ev.id,
-        time: ev.time,
-        magnitude: ev.magnitude,
-        location: ev.location
-    });
-    
-    // Keep only last 10 earthquakes per location
-    if (locationData.earthquakes.length > 10) {
-        locationData.earthquakes.shift();
-    }
-    
-    // Show announcement if 4 or more earthquakes at this location
-    if (locationData.count >= 4 && !locationData.active) {
-        locationData.active = true;
-        showActiveFaultBanner(locationData, key);
-    } else if (locationData.count >= 4 && locationData.active) {
-        // Update existing banner with latest data
-        updateActiveFaultBanner(locationData);
-    }
-}
-
-// Function to format time for display
-function formatActiveFaultTime(isoTime) {
-    try {
-        const date = new Date(isoTime);
-        const hours = date.getHours().toString().padStart(2, '0');
-        const minutes = date.getMinutes().toString().padStart(2, '0');
-        const day = date.getDate();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        return `${month}/${day} ${hours}:${minutes}`;
-    } catch {
-        return 'Unknown';
-    }
-}
-
-// Show active fault banner
-function showActiveFaultBanner(locationData, locationKey) {
-    if (currentActiveFault) {
-        closeActiveFaultBanner();
-    }
-    
-    currentActiveFault = { locationKey, locationData };
-    
-    const latestQuake = locationData.earthquakes[locationData.earthquakes.length - 1];
-    const timeStr = formatActiveFaultTime(latestQuake.time);
-    const magStr = latestQuake.magnitude.toFixed(1);
-    
-    activeFaultMessage.textContent = `${locationData.count} earthquakes • ${timeStr} M${magStr} • Click to view`;
-    
-    activeFaultBanner.style.display = 'block';
-    activeFaultBanner.classList.remove('closing');
-    void activeFaultBanner.offsetWidth; // Force reflow
-    activeFaultBanner.classList.add('active');
-}
-
-// Update existing active fault banner
-function updateActiveFaultBanner(locationData) {
-    const latestQuake = locationData.earthquakes[locationData.earthquakes.length - 1];
-    const timeStr = formatActiveFaultTime(latestQuake.time);
-    const magStr = latestQuake.magnitude.toFixed(1);
-    
-    activeFaultMessage.textContent = `${locationData.count} earthquakes • ${timeStr} M${magStr} • Click to view`;
-}
-
-// Close active fault banner
-function closeActiveFaultBanner() {
-    if (!activeFaultBanner || !activeFaultBanner.classList.contains('active')) return;
-    
-    activeFaultBanner.classList.remove('active');
-    activeFaultBanner.classList.add('closing');
-    
-    const onAnimationEnd = () => {
-        activeFaultBanner.style.display = 'none';
-        activeFaultBanner.classList.remove('closing');
-        activeFaultBanner.removeEventListener('animationend', onAnimationEnd);
-    };
-    
-    activeFaultBanner.addEventListener('animationend', onAnimationEnd);
-    currentActiveFault = null;
-}
-
-// Event listeners for banner
-if (activeFaultClose) {
-    activeFaultClose.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeActiveFaultBanner();
-    });
-}
-
-if (activeFaultBanner) {
-    activeFaultBanner.addEventListener('click', (e) => {
-        if (e.target === activeFaultClose) return;
-        
-        // Fly to the active fault location
-        if (currentActiveFault) {
-            const { locationData } = currentActiveFault;
-            map.flyTo([locationData.lat, locationData.lon], 12, {
-                duration: 1.5
-            });
-        }
-        e.stopPropagation();
-    });
-}
-
 // Function to mark when data was last updated
 function markUpdate() {
     lastUpdateTime = Date.now();
@@ -316,42 +182,197 @@ window.addEventListener('resize', function () {
     }
 });
 
-// Admin access button
-const adminBtn = document.createElement('button');
-adminBtn.textContent = 'Admin Panel';
-adminBtn.style.cssText = 'width: 100%; margin: 10px 0;';
-adminBtn.addEventListener('click', () => {
+// Admin auth — verified server-side via Firebase Auth + RTDB rules
+const OWNER_EMAIL = 'tifys587@gmail.com';
+const ADMIN_EMAILS = [OWNER_EMAIL];
+const btnAdminLogin = document.getElementById('btnAdminLogin');
+const btnAdminLogout = document.getElementById('btnAdminLogout');
+const adminSection = document.getElementById('adminSection');
+const announcementInput = document.getElementById('announcementInput');
+const btnPostAnnouncement = document.getElementById('btnPostAnnouncement');
+const btnRemoveAnnouncement = document.getElementById('btnRemoveAnnouncement');
+const adminAnnouncementBanner = document.getElementById('adminAnnouncementBanner');
+const adminAnnouncementMessage = document.getElementById('adminAnnouncementMessage');
+const adminNoticeToast = document.getElementById('adminNoticeToast');
+const adminNoticeIcon = document.getElementById('adminNoticeIcon');
+const adminNoticeMessage = document.getElementById('adminNoticeMessage');
+let adminNoticeTimer = null;
+
+function isAdminUser(user) {
+    return !!(user && user.email && ADMIN_EMAILS.includes(user.email));
+}
+
+function showAdminNotice(message, type = "success") {
+    if (!adminNoticeToast || !adminNoticeMessage) return;
+
+    clearTimeout(adminNoticeTimer);
+    adminNoticeToast.hidden = false;
+    adminNoticeToast.classList.remove("show", "success", "error", "warning");
+    adminNoticeToast.classList.add(type);
+    adminNoticeMessage.textContent = message;
+    if (adminNoticeIcon) {
+        adminNoticeIcon.textContent = type === "error"
+            ? "error"
+            : type === "warning"
+                ? "warning"
+                : "check_circle";
+    }
+
+    requestAnimationFrame(() => adminNoticeToast.classList.add("show"));
+    adminNoticeTimer = setTimeout(() => {
+        adminNoticeToast.classList.remove("show");
+        setTimeout(() => {
+            adminNoticeToast.hidden = true;
+        }, 220);
+    }, 3200);
+}
+
+function updateAnnouncementBannerHeight() {
+    if (!adminAnnouncementBanner || adminAnnouncementBanner.hidden) {
+        document.documentElement.style.setProperty('--announcement-banner-height', '0px');
+    } else {
+        document.documentElement.style.setProperty('--announcement-banner-height', `${adminAnnouncementBanner.offsetHeight}px`);
+    }
+    if (typeof map !== 'undefined' && map) {
+        map.invalidateSize();
+    }
+}
+
+function updateAdminUI(user) {
+    isAdmin = isAdminUser(user);
+
+    if (btnAdminLogin) btnAdminLogin.hidden = isAdmin;
+    if (btnAdminLogout) btnAdminLogout.hidden = !isAdmin;
+    if (adminSection) adminSection.hidden = !isAdmin;
+
+    if (isAdmin) {
+        viewerName = "Admin (" + (user?.email || OWNER_EMAIL) + ")";
+    } else {
+        localStorage.removeItem("isAdmin");
+        localStorage.removeItem("adminLoginTime");
+        if (!user) viewerName = localStorage.getItem("viewerName") || "Guest";
+    }
+
+    updateLastSeenOnly();
+    sessionsRef.once('value', snap => {
+        const sessions = snap.val() || {};
+        buildPresencePanel(sessions);
+        refreshPresenceMarkers(sessions);
+    });
+}
+
+function initAdminAuth() {
     if (!firebase.auth) {
-        alert("Firebase Auth not available. Please check Firebase configuration.");
+        console.warn("Firebase Auth not available.");
         return;
     }
-    const googleProvider = new firebase.auth.GoogleAuthProvider();
-    firebase.auth().signInWithPopup(googleProvider).then((result) => {
-        const user = result.user;
-        // Replace with your authorized email(s)
-        const allowedEmails = ['tifys587@gmail.com'];
-        if (allowedEmails.includes(user.email)) {
-            isAdmin = true;
-            localStorage.setItem("isAdmin", "true");
-            localStorage.setItem("adminLoginTime", Date.now().toString());
-            viewerName = "Admin";
-            updateLastSeenOnly(); // Update session with new name
-            // Refresh the presence panel
-            sessionsRef.once('value', snap => {
-                const sessions = snap.val() || {};
-                buildPresencePanel(sessions);
-                refreshPresenceMarkers(sessions);
-            });
-        } else {
-            alert("Not authorized for admin access.");
-            firebase.auth().signOut();
-        }
-    }).catch((error) => {
-        console.error("Sign in failed:", error);
-        alert("Sign in failed. Please try again.");
+
+    btnAdminLogin?.addEventListener('click', () => {
+        const googleProvider = new firebase.auth.GoogleAuthProvider();
+        googleProvider.setCustomParameters({ prompt: 'select_account' });
+        googleProvider.addScope('email');
+        firebase.auth().signInWithPopup(googleProvider).catch((error) => {
+            console.error("Sign in failed:", error);
+            showAdminNotice("Sign in failed. Please try again.", "error");
+        });
     });
-});
-panel.appendChild(adminBtn);
+
+    btnAdminLogout?.addEventListener('click', () => {
+        firebase.auth().signOut();
+    });
+
+    firebase.auth().onAuthStateChanged((user) => {
+        if (user && !isAdminUser(user)) {
+            showAdminNotice("Not authorized for admin access.", "error");
+            firebase.auth().signOut();
+            return;
+        }
+        updateAdminUI(user);
+    });
+}
+
+async function ensureAdminAuthToken() {
+    const user = firebase.auth().currentUser;
+    if (!user) throw new Error("NOT_SIGNED_IN");
+    if (!isAdminUser(user)) throw new Error("NOT_ADMIN");
+    await user.getIdToken(true);
+    return user;
+}
+
+async function postAnnouncement() {
+    const text = announcementInput?.value.trim();
+    if (!text) {
+        showAdminNotice("Please enter an announcement message.", "warning");
+        announcementInput?.focus();
+        return;
+    }
+
+    try {
+        const user = await ensureAdminAuthToken();
+        await firebase.database().ref("announcements/current").set({
+            text,
+            author: user.displayName || "Admin",
+            authorEmail: user.email,
+            updatedAt: firebase.database.ServerValue.TIMESTAMP,
+            active: true
+        });
+        announcementInput.value = "";
+        showAdminNotice("Announcement posted.", "success");
+    } catch (err) {
+        console.error("Failed to post announcement:", err);
+        if (err.message === "NOT_SIGNED_IN") {
+            showAdminNotice("Please click Admin Login and sign in first.", "warning");
+        } else if (err.message === "NOT_ADMIN") {
+            showAdminNotice("Only the site owner can post announcements.", "error");
+        } else if (err.code === "PERMISSION_DENIED") {
+            showAdminNotice("Permission denied. Check Firebase database rules.", "error");
+        } else {
+            showAdminNotice("Failed to post announcement. Please try again.", "error");
+        }
+    }
+}
+
+async function removeAnnouncement() {
+    try {
+        await ensureAdminAuthToken();
+        await firebase.database().ref("announcements/current").remove();
+        if (announcementInput) announcementInput.value = "";
+        showAdminNotice("Announcement removed.", "success");
+    } catch (err) {
+        console.error("Failed to remove announcement:", err);
+        if (err.message === "NOT_SIGNED_IN") {
+            showAdminNotice("Please click Admin Login and sign in first.", "warning");
+        } else if (err.code === "PERMISSION_DENIED") {
+            showAdminNotice("Permission denied. Check Firebase database rules.", "error");
+        } else {
+            showAdminNotice("Failed to remove announcement. Please try again.", "error");
+        }
+    }
+}
+
+function initAnnouncements() {
+    if (!firebase.database) return;
+
+    firebase.database().ref("announcements/current").on("value", (snap) => {
+        const data = snap.val();
+        const show = !!(data && data.active && data.text);
+
+        if (adminAnnouncementBanner) {
+            adminAnnouncementBanner.hidden = !show;
+        }
+        if (adminAnnouncementMessage) {
+            adminAnnouncementMessage.textContent = show ? data.text : "";
+        }
+        if (show && announcementInput && isAdmin && !announcementInput.value) {
+            announcementInput.value = data.text;
+        }
+
+        requestAnimationFrame(updateAnnouncementBannerHeight);
+    });
+
+    btnPostAnnouncement?.addEventListener('click', postAnnouncement);
+    btnRemoveAnnouncement?.addEventListener('click', removeAnnouncement);
+}
 
 // NOTIFICATION SYSTEM - FINAL WORKING VERSION
 const notificationBell = document.getElementById('notificationBell');
@@ -369,7 +390,7 @@ const presenceCountEl = document.getElementById("presenceCount");
 
 const sessionsRef = firebase.database().ref("sessions"); // count live
 const presenceMarkers = new Map();
-let isAdmin = localStorage.getItem("isAdmin") === "true";
+let isAdmin = false;
 const PRESENCE_SESSION_TIMEOUT_MS = 60 * 1000;
 const PRESENCE_AREA_RADIUS_METERS = 28000;
 const PRESENCE_PANEL_DATE_FORMAT = {
@@ -396,15 +417,6 @@ const PRESENCE_REGIONS = [
     { key: "caraga", name: "Caraga", center: [8.8015, 125.7407], bounds: [7.7, 125.2, 10.2, 126.7] },
     { key: "barmm", name: "BARMM", center: [6.9568, 124.2422], bounds: [4.5, 119.0, 8.0, 125.3] }
 ];
-
-// Check if admin login has expired (30 days)
-const adminLoginTime = localStorage.getItem("adminLoginTime");
-const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
-if (adminLoginTime && Date.now() - parseInt(adminLoginTime) > thirtyDaysMs) {
-    localStorage.removeItem("isAdmin");
-    localStorage.removeItem("adminLoginTime");
-    isAdmin = false;
-}
 
 // Unique viewer id persisted per browser
 let viewerId = localStorage.getItem("viewerId");
@@ -964,9 +976,10 @@ function playQuakeSound(isNearby = false, magnitude = 0) {
  ************************************************************************/
 const CONFIG = {
     API_ENDPOINT: "https://earthquakeapi.forestparty223.workers.dev/api/earthquakes",
+    USGS_ENDPOINT: "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&orderby=time&minlatitude=4&maxlatitude=21&minlongitude=116&maxlongitude=127&limit=2000",
     DEFAULT_POLL_MS: 15000,
 };
-let currentSource = "forestparty";
+let currentSource = "phivolcs";
 
 
 let circleScale = 0.5;
@@ -976,12 +989,21 @@ let latestMarker = null;
 let pollHandle = null;
 let currentNotificationId = null;
 
+function clearAllEarthquakeMarkers() {
+    markers.forEach(({ layer }) => {
+        try {
+            map.removeLayer(layer);
+        } catch (err) { /* ignore */ }
+    });
+    markers.clear();
+    latestMarker = null;
+    latestEarthquakeId = null;
+}
+
 document.getElementById("sourceSelector").addEventListener("change", function (e) {
     currentSource = e.target.value;
-    if (!markers.has(event.id)) {
-        addOrUpdateEventMarker(event);
-    }
-    markers.clear();
+    clearAllEarthquakeMarkers();
+    setStatus(`Switching to ${currentSource === "usgs" ? "USGS" : "PHIVOLCS"}...`);
     fetchNewEvents();
 });
 
@@ -1011,6 +1033,15 @@ const map = L.map("map", {
     minZoom: 5, // Minimum zoom level - prevents zooming out to see the world
     maxZoom: 18 // Maximum zoom level for detailed viewing
 }).setView([13.4, 121.8], 6); // Centered on Marinduque - center of Philippines
+
+// Dedicated panes so the latest star always renders above older circles + tooltips
+map.createPane("earthquakeCircles");
+map.getPane("earthquakeCircles").style.zIndex = "450";
+map.createPane("latestEarthquake");
+map.getPane("latestEarthquake").style.zIndex = "850";
+map.createPane("earthquakeLabels");
+map.getPane("earthquakeLabels").style.zIndex = "950";
+map.getPane("earthquakeLabels").style.pointerEvents = "none";
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     preferCanvas: true,
@@ -1121,7 +1152,17 @@ function normalizeEvent(raw) {
         time: raw.time ?? null,
         location: raw.location ?? "",
         link: raw.link ?? null,
+        source: raw.source ?? currentSource,
     };
+}
+
+function getReportSourceLabel(ev) {
+    return ev?.source === "usgs" ? "USGS" : "PHIVOLCS";
+}
+
+function reportLinkHtml(ev) {
+    if (!ev?.link) return "";
+    return `<a href="${ev.link}" target="_blank" rel="noopener noreferrer">View report from ${getReportSourceLabel(ev)}</a>`;
 }
 
 
@@ -1198,143 +1239,109 @@ function formatDateTime(dt) {
  * MARKERS & ANIMATION
  ************************************************************************/
 
-function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
-    if (!ev.lat || !ev.lon) return;
+function ensureLatestMarkerOnTop() {
+    if (!latestMarker) return;
+    const markerLayer = latestMarker;
 
-    // Track earthquake location for active fault detection
-    trackEarthquakeLocation(ev);
-
-    if (markers.has(ev.id)) return;
-
-    if (isLatest && latestMarker && latestMarker._eventId) {
-        const prevData = markers.get(latestMarker._eventId)?.data;
-        if (prevData) {
-            map.removeLayer(latestMarker);
-            const oldCircle = L.circleMarker([prevData.lat, prevData.lon], {
-                radius: magToRadius(prevData.magnitude),
-                color: "#222",
-                weight: 1,
-                fillOpacity: 0.8,
-                fillColor: magToColor(prevData.magnitude),
-            }).bindPopup(`
-              <strong>${prevData.location || "Unknown"}</strong><br>
-              Mag: ${prevData.magnitude}<br>
-              Depth: ${prevData.depth ?? "?"} km<br>
-              ${formatDateTime(prevData.time)}<br>
-              ${prevData.link ? `<a href="${prevData.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
-            `).addTo(map);
-
-            oldCircle.bindTooltip(`M${prevData.magnitude}`, {
-                permanent: true,
-                direction: "center",
-                className: "magnitude-label",
-                opacity: 1
+    const elevate = () => {
+        try {
+            // Push every older earthquake behind the latest star
+            markers.forEach(({ layer }) => {
+                if (layer === markerLayer) return;
+                applyMarkerStacking(layer);
             });
 
-            markers.set(prevData.id, { layer: oldCircle, data: prevData });
-        }
-    }
+            if (markerLayer.bringToFront) markerLayer.bringToFront();
+            applyMarkerStacking(markerLayer, true);
 
-
-    let marker;
-
-    // When placing latest marker
-    if (isLatest) {
-        const triangle = L.shapeMarker(ev.lat, ev.lon, {
-            shape: 'star',
-            radius: magToRadius(ev.magnitude) * 1.4,
-            color: '#ff0000',      // stroke red
-            fillColor: '#ff6666',  // fill softer red
-            fillOpacity: 0.95,
-            weight: 2
-        }).bindPopup(`
-          <strong>${ev.location || "Unknown"}</strong><br>
-          Mag: ${ev.magnitude}<br>
-          Depth: ${ev.depth ?? "?"} km<br>
-          ${formatDateTime(ev.time)}<br>
-          ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
-          animateLatestMarker(triangle);
-        `).addTo(map);
-
-        triangle.bindTooltip(`M${ev.magnitude}`, {
-            permanent: true,
-            direction: "center",
-            className: "magnitude-label latest",
-            opacity: 1
-        });
-
-        marker = triangle;
-    } else {
-        // 🟢 Regular quake = circle
-        const circle = L.circleMarker([ev.lat, ev.lon], {
-            radius: magToRadius(ev.magnitude),
-            color: "#222",
-            weight: 1,
-            fillOpacity: 0.8,
-            fillColor: magToColor(ev.magnitude),
-        }).bindPopup(`
-          <strong>${ev.location || "Unknown"}</strong><br>
-          Mag: ${ev.magnitude}<br>
-          Depth: ${ev.depth ?? "?"} km<br>
-          ${formatDateTime(ev.time)}<br>
-          ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
-        `).addTo(map);
-
-        circle.bindTooltip(`M${ev.magnitude}`, {
-            permanent: true,
-            direction: "center",
-            className: "magnitude-label",
-            opacity: 1
-        });
-
-        marker = circle;
-    }
-
-    marker._eventId = ev.id;
-    markers.set(ev.id, { layer: marker, data: ev });
-
-    if (playSoundFlag && userLocation) {
-        const dist = getDistanceKm(ev.lat, ev.lon, userLocation.lat, userLocation.lon);
-        const isNearby = dist <= 100;
-        playQuakeSound(isNearby, ev.magnitude);
-    }
-
-    if (isLatest) {
-        latestMarker = markerLayer;
-
-        // Animate, notify, shake map
-        animateLatestMarker(markerLayer);
-        showNotification(ev, markerLayer);
-        addRealShakeMapLayer();
-
-        // ✅ Bring the latest marker and tooltip above all others
-        setTimeout(() => {
-            try {
-                markerLayer.bringToFront(); // Leaflet layer
-                const tooltip = markerLayer.getTooltip();
-                if (tooltip && tooltip._container) {
-                    tooltip._container.style.zIndex = 9999; // tooltip front
-
-                    // Ensure tooltip stays within viewport
-                    const rect = tooltip._container.getBoundingClientRect();
-                    if (rect.right > window.innerWidth) {
-                        tooltip._container.style.left = `${window.innerWidth - rect.width - 10}px`;
-                    }
-                    if (rect.bottom > window.innerHeight) {
-                        tooltip._container.style.top = `${window.innerHeight - rect.height - 10}px`;
-                    }
-                }
-
-                // If using divIcon SVG, raise its z-index
-                const el = markerLayer.getElement?.();
-                if (el) {
-                    el.style.zIndex = 9999;
-                    el.style.position = "relative";
-                }
-            } catch (err) {
-                console.warn("Failed to bring latest marker to front:", err);
+            const latestPane = map.getPane("latestEarthquake");
+            const el = markerLayer.getElement?.();
+            if (el && latestPane) {
+                latestPane.appendChild(el);
+                el.style.zIndex = "99999";
+                el.style.pointerEvents = "auto";
             }
-        }, 50); // slight delay ensures Leaflet finished rendering
+
+            const tooltip = markerLayer.getTooltip();
+            if (tooltip?._container) {
+                const tooltipPane = map.getPane("earthquakeLabels") || map.getPane("tooltipPane");
+                if (tooltipPane) tooltipPane.appendChild(tooltip._container);
+                tooltip._container.style.zIndex = "100500";
+                tooltip._container.classList.add("latest-on-top");
+
+                const rect = tooltip._container.getBoundingClientRect();
+                if (rect.right > window.innerWidth) {
+                    tooltip._container.style.left = `${window.innerWidth - rect.width - 10}px`;
+                }
+                if (rect.bottom > window.innerHeight) {
+                    tooltip._container.style.top = `${window.innerHeight - rect.height - 10}px`;
+                }
+            }
+        } catch (err) {
+            console.warn("Failed to bring latest marker to front:", err);
+        }
+    };
+
+    elevate();
+    requestAnimationFrame(elevate);
+    setTimeout(elevate, 50);
+    setTimeout(elevate, 200);
+    setTimeout(elevate, 500);
+}
+
+function getEventTimeMs(ev) {
+    const timeMs = new Date(ev?.time).getTime();
+    return Number.isFinite(timeMs) ? timeMs : 0;
+}
+
+function getEventStackIndex(ev, isLatest = false) {
+    const base = Math.floor(getEventTimeMs(ev) / 1000);
+    return (isLatest ? 100000 : 1000) + (base % 800000);
+}
+
+function applyMarkerStacking(layer, isLatest = false) {
+    if (!layer) return;
+    const data = markers.get(layer._eventId)?.data;
+    const zIndex = getEventStackIndex(data, isLatest);
+
+    if (layer.setZIndexOffset) {
+        layer.setZIndexOffset(isLatest ? 1000000 : zIndex);
+    }
+
+    if (layer._path) {
+        layer._path.style.zIndex = String(zIndex);
+    }
+
+    const el = layer.getElement?.();
+    if (el) {
+        el.style.zIndex = String(isLatest ? 1000000 : zIndex);
+    }
+
+    const tooltipEl = layer.getTooltip()?._container;
+    if (tooltipEl) {
+        const labelPane = map.getPane("earthquakeLabels") || map.getPane("tooltipPane");
+        if (labelPane && tooltipEl.parentNode !== labelPane) {
+            labelPane.appendChild(tooltipEl);
+        }
+        tooltipEl.style.zIndex = String(isLatest ? 100500 : zIndex + 500);
+    }
+}
+
+function restackEarthquakeMarkers() {
+    const layers = Array.from(markers.values())
+        .map(({ layer, data }) => ({ layer, data }))
+        .sort((a, b) => getEventTimeMs(a.data) - getEventTimeMs(b.data));
+
+    layers.forEach(({ layer }) => {
+        if (layer !== latestMarker && layer.bringToFront) {
+            layer.bringToFront();
+        }
+        applyMarkerStacking(layer, layer === latestMarker);
+    });
+
+    if (latestMarker) {
+        if (latestMarker.bringToFront) latestMarker.bringToFront();
+        applyMarkerStacking(latestMarker, true);
     }
 }
 
@@ -2087,193 +2094,202 @@ function getDateRange(filter) {
 }
 
 /************************************************************************
- * FETCH EVENTS (with cache + Facebook RSS fallback + ForestParty API)
+ * FETCH EVENTS
  ************************************************************************/
+const FETCH_TIMEOUT_MS = 12000;
+
+function getCacheKey() {
+    return `cachedEarthquakes_${currentSource}`;
+}
+
+function getCacheTimeKey() {
+    return `cachedEarthquakesTime_${currentSource}`;
+}
+
+function filterEventsByDateRange(events) {
+    if (!currentRange?.start || !currentRange?.end) return events;
+    const startMs = currentRange.start.getTime();
+    const endMs = currentRange.end.getTime();
+    return events.filter(ev => {
+        const t = new Date(ev.time).getTime();
+        return !isNaN(t) && t >= startMs && t <= endMs;
+    });
+}
+
+function parseWorkerEarthquakes(json) {
+    if (!Array.isArray(json)) return [];
+    return json.map(e => {
+        let time;
+        try {
+            const rawTime = e.date_time || e.time;
+            if (!rawTime) {
+                time = new Date().toISOString();
+            } else {
+                const parts = String(rawTime).split(" - ");
+                time = parts.length === 2
+                    ? new Date(`${parts[0]} ${parts[1]}`).toISOString()
+                    : new Date(rawTime).toISOString();
+            }
+        } catch {
+            time = new Date().toISOString();
+        }
+
+        const lat = parseFloat(e.latitude ?? e.lat);
+        const lon = parseFloat(e.longitude ?? e.lon);
+        const location = (e.location || "Philippines")
+            .replace(/^\d+\s*km\s*/i, "")
+            .replace(/\n|\t/g, " ")
+            .trim()
+            .replace(/\s+/g, " ");
+
+        return {
+            id: String(e.details_link || e.id || `${time}_${lat}_${lon}`),
+            lat,
+            lon,
+            magnitude: parseFloat(e.magnitude) || 0,
+            depth: e.depth_km ?? e.depth ?? null,
+            time,
+            location,
+            link: e.details_link ?? e.link ?? null,
+            source: "phivolcs",
+        };
+    }).filter(ev => ev.lat && ev.lon && !isNaN(ev.lat) && !isNaN(ev.lon));
+}
+
+function parseUsgsEarthquakes(json) {
+    return (json.features || []).map(f => ({
+        id: f.id,
+        lat: f.geometry.coordinates[1],
+        lon: f.geometry.coordinates[0],
+        magnitude: f.properties.mag,
+        depth: f.geometry.coordinates[2],
+        time: new Date(f.properties.time).toISOString(),
+        location: f.properties.place,
+        link: f.properties.url,
+        source: "usgs",
+    })).filter(e => e.lat && e.lon);
+}
+
+function formatUsgsIso(date) {
+    return date.toISOString().slice(0, 19) + "Z";
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs = FETCH_TIMEOUT_MS, useCacheBuster = false) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const fetchUrl = useCacheBuster
+            ? `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`
+            : url;
+        const resp = await fetch(fetchUrl, {
+            cache: "no-store",
+            signal: controller.signal
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return await resp.json();
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+function buildWorkerUrl() {
+    let url = CONFIG.API_ENDPOINT;
+    if (currentRange.start && currentRange.end) {
+        url += `?start=${currentRange.start.toISOString()}&end=${currentRange.end.toISOString()}`;
+    }
+    return url;
+}
+
+function buildUsgsUrl() {
+    let url = CONFIG.USGS_ENDPOINT;
+    if (currentRange.start && currentRange.end) {
+        const start = new Date(currentRange.start);
+        let end = new Date(Math.min(currentRange.end.getTime(), Date.now()));
+        if (start > end) end = new Date();
+        url += `&starttime=${encodeURIComponent(formatUsgsIso(start))}`;
+        url += `&endtime=${encodeURIComponent(formatUsgsIso(end))}`;
+    }
+    return url;
+}
+
+function renderEarthquakeEvents(events, sourceLabel) {
+    if (!events.length) throw new Error("No events received");
+
+    events.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+    const latest = events[0];
+    const isNewQuake = latestEarthquakeId !== latest.id;
+
+    // Add oldest events first so the latest star is rendered last and stays on top
+    const oldestFirst = [...events].sort((a, b) => new Date(a.time) - new Date(b.time));
+    oldestFirst.forEach(ev => addOrUpdateEventMarker(
+        ev,
+        ev.id === latest.id,
+        ev.id === latest.id && isNewQuake
+    ));
+
+    restackEarthquakeMarkers();
+    ensureLatestMarkerOnTop();
+
+    latestEarthquakeId = latest.id;
+    localStorage.setItem(getCacheKey(), JSON.stringify(events));
+    localStorage.setItem(getCacheTimeKey(), Date.now().toString());
+    setStatus(`${sourceLabel}: ${events.length} events — latest: ${latest.location} (M${latest.magnitude})`);
+}
+
+function showCachedEarthquakes() {
+    const cached = localStorage.getItem(getCacheKey());
+    const cachedTime = localStorage.getItem(getCacheTimeKey());
+    if (!cached) {
+        setStatus("No earthquakes available — try switching to USGS");
+        return false;
+    }
+
+    const events = JSON.parse(cached);
+    const ageMins = Math.floor((Date.now() - parseInt(cachedTime, 10)) / 60000);
+    events.sort((a, b) => new Date(b.time) - new Date(a.time));
+    const latest = events[0];
+    const oldestFirst = [...events].sort((a, b) => new Date(a.time) - new Date(b.time));
+    oldestFirst.forEach(ev => addOrUpdateEventMarker(ev, ev.id === latest.id, false));
+    restackEarthquakeMarkers();
+    ensureLatestMarkerOnTop();
+    setStatus(`Showing cached earthquakes (saved ${ageMins} min ago)`);
+    return true;
+}
+
+async function fetchFromWorker() {
+    const json = await fetchJsonWithTimeout(buildWorkerUrl(), FETCH_TIMEOUT_MS, true);
+    return filterEventsByDateRange(parseWorkerEarthquakes(json));
+}
+
+async function fetchFromUsgs() {
+    const json = await fetchJsonWithTimeout(buildUsgsUrl(), FETCH_TIMEOUT_MS, false);
+    return filterEventsByDateRange(parseUsgsEarthquakes(json));
+}
+
 async function fetchNewEvents() {
     setStatus("Fetching events...");
-    const cacheKey = "cachedEarthquakes";
-    const cacheTimeKey = "cachedEarthquakesTime";
-    const fbFeedUrl = "https://earthquakeapi.forestparty223.workers.dev/api/earthquakes";
 
     try {
-        let url;
-        if (currentSource === "phivolcs") {
-            url = CONFIG.API_ENDPOINT;
-            if (currentRange.start && currentRange.end) {
-                url += `?start=${currentRange.start.toISOString()}&end=${currentRange.end.toISOString()}`;
-            }
-        } else if (currentSource === "usgs") {
-            url = CONFIG.USGS_ENDPOINT;
-            if (currentRange.start && currentRange.end) {
-                url += `?start=${currentRange.start.toISOString().slice(0, 10)}&end=${currentRange.end.toISOString().slice(0, 10)}`;
-            }
-        } else if (currentSource === "emsc") {
-            url = CONFIG.EMSC_ENDPOINT;
-        } else if (currentSource === "forestparty") {
-            url = "https://earthquakeapi.forestparty223.workers.dev/api/earthquakes";
+        let events = [];
+        let sourceLabel = "";
+
+        if (currentSource === "usgs") {
+            events = await fetchFromUsgs();
+            sourceLabel = "USGS";
+        } else if (currentSource === "phivolcs") {
+            events = await fetchFromWorker();
+            sourceLabel = "PHIVOLCS";
         } else {
             throw new Error("Unknown source selected");
         }
 
-        // ✅ Fetch from the selected source
-        const resp = await fetch(url + (url.includes("?") ? "&" : "?") + `t=${Date.now()}`, { cache: "no-store" });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const json = await resp.json();
-
-        // Normalize events based on source
-        let events = [];
-        if (currentSource === "phivolcs") {
-            events = json.map(normalizeEvent).filter(e => e.lat && e.lon);
-        } else if (currentSource === "usgs") {
-            events = (json.features || []).map(f => ({
-                id: f.id,
-                lat: f.geometry.coordinates[1],
-                lon: f.geometry.coordinates[0],
-                magnitude: f.properties.mag,
-                depth: f.geometry.coordinates[2],
-                time: new Date(f.properties.time).toISOString(),
-                location: f.properties.place,
-                link: f.properties.url
-            })).filter(e => e.lat && e.lon);
-        } else if (currentSource === "emsc") {
-            events = json.map(e => ({
-                id: e.id,
-                lat: e.lat,
-                lon: e.lon,
-                magnitude: e.magnitude,
-                depth: e.depth,
-                time: e.time,
-                location: e.location,
-                link: e.link
-            })).filter(e => e.lat && e.lon);
-        } else if (currentSource === "forestparty") {
-            events = json.map(e => {
-                let time;
-                try {
-                    const parts = e.date_time.split(" - ");
-                    if (parts.length === 2) {
-                        const [dateStr, timeStr] = parts;
-                        time = new Date(`${dateStr} ${timeStr}`).toISOString();
-                    } else {
-                        time = new Date(e.date_time).toISOString();
-                    }
-                } catch {
-                    time = new Date().toISOString();
-                }
-
-                let location = (e.location || "Philippines")
-                    .replace(/^\d+\s*km\s*/i, "")
-                    .replace(/\n|\t/g, " ")
-                    .trim()
-                    .replace(/\s+/g, " ");
-
-                const id = e.details_link || Math.random().toString(36).substr(2, 9);
-
-                return {
-                    id,
-                    lat: e.latitude,
-                    lon: e.longitude,
-                    magnitude: e.magnitude,
-                    depth: e.depth_km,
-                    time,
-                    location,
-                    link: e.details_link
-                };
-            })
-                .filter(ev => ev.lat && ev.lon && ev.time && ev.location);
-
-            // --- FILTER ONLY TODAY'S EVENTS ---
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); // 12:00 AM today
-            events = events.filter(ev => new Date(ev.time) >= today);
-        }
-
-        if (!events.length) throw new Error("No events received");
-
-        // ✅ Sort newest first
-        events.sort((a, b) => new Date(b.time) - new Date(a.time));
-
-
-        const latest = events[0];
-        const isNewQuake = latestEarthquakeId !== latest.id;
-
-        // Animate/sound only if new quake detected
-        events.forEach(ev => addOrUpdateEventMarker(
-            ev,
-            ev.id === latest.id && isNewQuake,
-            ev.id === latest.id && isNewQuake
-        ));
-
-        latestEarthquakeId = latest.id;
-
-        // ✅ Cache successful result
-        localStorage.setItem(cacheKey, JSON.stringify(events));
-        localStorage.setItem(cacheTimeKey, Date.now().toString());
-
-        setStatus(`Fetched ${events.length} events — latest: ${latest.location} (M${latest.magnitude})`);
-
+        renderEarthquakeEvents(events, sourceLabel);
     } catch (e) {
-        console.warn("⚠️ Fetch failed:", e.message);
-        setStatus("Website down — switching to Facebook fallback...");
-
-        // Fallback: PHIVOLCS Facebook RSS
-        try {
-            const rssRes = await fetch(fbFeedUrl);
-            const rssText = await rssRes.text();
-            const parser = new DOMParser();
-            const xml = parser.parseFromString(rssText, "text/xml");
-            const items = [...xml.querySelectorAll("item")];
-            if (!items.length) throw new Error("No Facebook RSS items found");
-
-            const fallbackEvents = items.map((item, index) => {
-                const raw = item.querySelector("description")?.textContent || "";
-                const cleanText = raw
-                    .replace(/<[^>]+>/g, "")
-                    .replace(/#\S+/g, "")
-                    .replace(/https?:\/\/\S+/g, "")
-                    .replace(/\s+/g, " ")
-                    .trim();
-
-                const magnitude = parseFloat(cleanText.match(/Magnitude\s*=?\s*([\d.]+)/i)?.[1] || 0);
-                const depth = parseFloat(cleanText.match(/Depth\s*=?\s*(\d+)/i)?.[1] || 0);
-                const lat = parseFloat(cleanText.match(/Location\s*=\s*([0-9.]+)°\s*[NS]/i)?.[1] || 0);
-                const lon = parseFloat(cleanText.match(/,\s*([0-9.]+)°\s*[EW]/i)?.[1] || 0);
-                const dateMatch = cleanText.match(/Date and Time:\s*(.+?)(?=Magnitude|$)/i);
-                const time = dateMatch ? dateMatch[1].trim() : "Unknown time";
-                const locMatch = cleanText.match(/E of (.+?)\)/i);
-                const location = locMatch ? locMatch[1].trim() : "Philippines";
-
-                if (lat && lon) return { id: `fb_${index}`, lat, lon, magnitude, depth, time, location, link: null };
-                return null;
-            }).filter(Boolean);
-
-            if (!fallbackEvents.length) throw new Error("No valid Facebook entries");
-
-            fallbackEvents.sort((a, b) => new Date(b.time) - new Date(a.time));
-            const latest = fallbackEvents[0];
-
-            fallbackEvents.forEach(ev => addOrUpdateEventMarker(ev, ev.id === latest.id, ev.id === latest.id));
-
-            latestEarthquakeId = latest.id;
-            setStatus(`Fallback: Showing ${fallbackEvents.length} events from Facebook feed`);
-
-            localStorage.setItem(cacheKey, JSON.stringify(fallbackEvents));
-            localStorage.setItem(cacheTimeKey, Date.now().toString());
-
-        } catch (fbErr) {
-            console.error("❌ Facebook fallback also failed:", fbErr);
-            setStatus("All sources unavailable");
-
-            const cached = localStorage.getItem(cacheKey);
-            const cachedTime = localStorage.getItem(cacheTimeKey);
-            if (cached) {
-                const events = JSON.parse(cached);
-                const ageMins = Math.floor((Date.now() - cachedTime) / 60000);
-                setStatus(`Showing cached earthquakes (saved ${ageMins} min ago)`);
-                events.forEach(ev => addOrUpdateEventMarker(ev, false, false));
-            } else {
-                setStatus("No cached earthquakes available 😕");
-            }
+        console.warn("Fetch failed:", e.message);
+        setStatus("Live sources unavailable — trying cache...");
+        if (!showCachedEarthquakes()) {
+            setStatus("No earthquakes available. Select USGS or check your connection.");
         }
     }
 }
@@ -2303,8 +2319,7 @@ document.getElementById("dateFilter").addEventListener("change", e => {
     } else {
         document.getElementById("customRange").style.display = "none";
         currentRange = getDateRange(val);
-        markers.forEach(({ layer }) => map.removeLayer(layer));
-        markers.clear();
+        clearAllEarthquakeMarkers();
         fetchNewEvents();
     }
 });
@@ -2369,8 +2384,7 @@ document.getElementById("btnApplyRange").addEventListener("click", () => {
     const endInput = document.getElementById("endDate").value;
     if (startInput && endInput) {
         currentRange = { start: new Date(startInput), end: new Date(endInput) };
-        markers.forEach(({ layer }) => map.removeLayer(layer));
-        markers.clear();
+        clearAllEarthquakeMarkers();
         fetchNewEvents();
     }
 });
@@ -2517,11 +2531,9 @@ function refreshMap() {
 
     markers.forEach(({ layer }) => {
         if (layer._pulse) clearInterval(layer._pulse);
-        map.removeLayer(layer);
     });
-    markers.clear();
+    clearAllEarthquakeMarkers();
     if (flyTimeout) clearTimeout(flyTimeout);
-    latestMarker = null;
 
     // Use regular fetchNewEvents to ensure notifications work
     console.log('[Refresh] Refreshing earthquake data...');
@@ -2557,13 +2569,13 @@ async function fetchNewEventsWithoutSound() {
         // Get the latest earthquake
         const latest = events[0];
 
-        // Add all events, but only animate/notify the latest
-        events.forEach((ev, idx) => {
-            const isLatest = ev.id === latest.id;
-            addOrUpdateEventMarker(ev, isLatest, false); // false = no sound, but still notify
+        const oldestFirst = [...events].sort((a, b) => new Date(a.time) - new Date(b.time));
+        oldestFirst.forEach(ev => {
+            addOrUpdateEventMarker(ev, ev.id === latest.id, false);
         });
+        restackEarthquakeMarkers();
+        ensureLatestMarkerOnTop();
 
-        // Update latest earthquake ID
         if (latest) {
             latestEarthquakeId = latest.id;
         }
@@ -2582,8 +2594,14 @@ async function fetchNewEventsWithoutSound() {
 function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
     if (!ev || !ev.lat || !ev.lon) return;
 
-    // ✅ Ignore duplicates
-    if (markers.has(ev.id)) return;
+    // If already on map, just re-elevate when it's the latest
+    if (markers.has(ev.id)) {
+        if (isLatest) {
+            latestMarker = markers.get(ev.id).layer;
+            ensureLatestMarkerOnTop();
+        }
+        return;
+    }
 
     // If a previous latest exists and a new latest is incoming, revert previous latest to a circle
     if (isLatest && latestMarker && latestMarker._eventId && latestMarker._eventId !== ev.id) {
@@ -2602,23 +2620,26 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
                 weight: 1,
                 fillOpacity: 0.8,
                 fillColor: magToColor(prevData.magnitude),
+                pane: "earthquakeCircles",
             }).bindPopup(`
                 <strong>${prevData.location || "Unknown"}</strong><br>
                 Mag: ${prevData.magnitude}<br>
                 Depth: ${prevData.depth ?? "?"} km<br>
                 ${formatDateTime(prevData.time)}<br>
-                ${prevData.link ? `<a href="${prevData.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
+                ${reportLinkHtml(prevData)}
             `).addTo(map);
 
             oldCircle.bindTooltip(`M${prevData.magnitude}`, {
                 permanent: true,
                 direction: "center",
                 className: "magnitude-label",
-                opacity: 1
+                opacity: 1,
+                pane: "earthquakeLabels"
             });
 
             // replace in the markers map
             markers.set(prevData.id, { layer: oldCircle, data: prevData });
+            applyMarkerStacking(oldCircle, false);
             latestMarker = null; // we'll set the new latest later
         }
     }
@@ -2636,14 +2657,19 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
             iconAnchor: [size / 2, size / 2]
         });
 
-        markerLayer = L.marker([ev.lat, ev.lon], { icon }).addTo(map);
+        markerLayer = L.marker([ev.lat, ev.lon], {
+            icon,
+            pane: "latestEarthquake",
+            zIndexOffset: 9999,
+            riseOnHover: true
+        }).addTo(map);
 
         markerLayer.bindPopup(`
           <strong>${ev.location || "Unknown"}</strong><br>
           Mag: ${ev.magnitude}<br>
           Depth: ${ev.depth ?? "?"} km<br>
           ${formatDateTime(ev.time)}<br>
-          ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
+          ${reportLinkHtml(ev)}
         `);
 
         // Add a prominent tooltip for the latest
@@ -2651,7 +2677,8 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
             permanent: true,
             direction: "center",
             className: "magnitude-label latest",
-            opacity: 1
+            opacity: 1,
+            pane: "earthquakeLabels"
         });
 
         // marker.getElement() returns the DIV; query the svg inside it:
@@ -2667,6 +2694,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
             weight: 1,
             fillOpacity: 0.8,
             fillColor: magToColor(ev.magnitude),
+            pane: "earthquakeCircles",
         }).addTo(map);
 
         markerLayer.bindPopup(`
@@ -2674,20 +2702,22 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
           Mag: ${ev.magnitude}<br>
           Depth: ${ev.depth ?? "?"} km<br>
           ${formatDateTime(ev.time)}<br>
-          ${ev.link ? `<a href="${ev.link}" target="_blank">VIEW REPORT FROM PHIVOLCS</a>` : ""}
+          ${reportLinkHtml(ev)}
         `);
 
         markerLayer.bindTooltip(`M${ev.magnitude}`, {
             permanent: true,
             direction: "center",
             className: "magnitude-label",
-            opacity: 1
+            opacity: 1,
+            pane: "earthquakeLabels"
         });
     }
 
     // set housekeeping props and store
     markerLayer._eventId = ev.id;
     markers.set(ev.id, { layer: markerLayer, data: ev });
+    applyMarkerStacking(markerLayer, isLatest);
 
     // optionally play sound based on proximity
     if (playSoundFlag && userLocation) {
@@ -2710,41 +2740,19 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
         try { showNotification(ev, markerLayer); } catch (err) { console.warn("showNotification error:", err); }
         try { addRealShakeMapLayer(); } catch (err) { /* ignore */ }
 
-        // Force latest marker and tooltip on top
-        setTimeout(() => {
-            try {
-                // Bring marker layer front (works for circleMarker and normal markers)
-                if (markerLayer.bringToFront) markerLayer.bringToFront();
-
-                // If tooltip exists
-                const tooltip = markerLayer.getTooltip();
-                if (tooltip && tooltip._container) {
-                    tooltip._container.style.zIndex = 9999; // tooltip front
-
-                    // Ensure tooltip stays within viewport
-                    const rect = tooltip._container.getBoundingClientRect();
-                    if (rect.right > window.innerWidth) {
-                        tooltip._container.style.left = `${window.innerWidth - rect.width - 10}px`;
-                    }
-                    if (rect.bottom > window.innerHeight) {
-                        tooltip._container.style.top = `${window.innerHeight - rect.height - 10}px`;
-                    }
-                }
-
-                // If using divIcon SVG, raise its z-index
-                const el = markerLayer.getElement?.();
-                if (el) {
-                    el.style.zIndex = 9999;
-                    el.style.position = "relative"; // required for z-index
-                }
-            } catch (err) {
-                console.warn("Failed to bring latest marker to front:", err);
-            }
-        }, 50); // small delay ensures Leaflet finished rendering
+        restackEarthquakeMarkers();
+        ensureLatestMarkerOnTop();
     }
-
-
 }
+
+map.on("zoomend", () => {
+    restackEarthquakeMarkers();
+    ensureLatestMarkerOnTop();
+});
+map.on("moveend", () => {
+    restackEarthquakeMarkers();
+    ensureLatestMarkerOnTop();
+});
 
 // Runtime safeguard: hide on mobile, show on desktop
 function handleMagnitudeLabelsResponsive() {
@@ -3513,6 +3521,8 @@ if ('serviceWorker' in navigator) {
         initLocationButton();
     }
     initNotificationSystem(); // Initialize push notifications
+    initAdminAuth();
+    initAnnouncements();
     initPresenceTracking();
     initPWAInstallCard(); // Initialize PWA install modal
     fetchNewEvents(); // initial load
