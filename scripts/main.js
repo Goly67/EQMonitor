@@ -414,7 +414,11 @@ const PRESENCE_REGIONS = [
     { key: "northern-mindanao", name: "Northern Mindanao", center: [8.0202, 124.6857], bounds: [7.4, 123.5, 9.3, 125.7] },
     { key: "davao", name: "Davao Region", center: [7.1907, 125.4553], bounds: [5.8, 125.0, 8.2, 126.6] },
     { key: "soccsksargen", name: "SOCCSKSARGEN", center: [6.2707, 124.6857], bounds: [5.2, 123.4, 7.4, 125.4] },
-    { key: "caraga", name: "Caraga", center: [8.8015, 125.7407], bounds: [7.7, 125.2, 10.2, 126.7] },
+    { key: "surigao-del-norte", name: "Surigao del Norte", center: [9.7823, 125.4932], bounds: [9.2, 124.8, 10.2, 126.0] },
+{ key: "dinagat-islands", name: "Dinagat Islands", center: [10.1279, 125.6083], bounds: [9.8, 125.3, 10.6, 126.1] },
+{ key: "agusan-del-norte", name: "Agusan del Norte", center: [8.9475, 125.5406], bounds: [8.3, 125.0, 9.3, 125.9] },
+{ key: "surigao-del-sur", name: "Surigao del Sur", center: [9.0778, 126.1969], bounds: [7.8, 125.5, 9.5, 126.8] },
+{ key: "agusan-del-sur", name: "Agusan del Sur", center: [8.1666, 126.0154], bounds: [7.5, 125.4, 8.9, 126.6] },
     { key: "barmm", name: "BARMM", center: [6.9568, 124.2422], bounds: [4.5, 119.0, 8.0, 125.3] }
 ];
 
@@ -495,17 +499,22 @@ function getPresenceAreaFromCoords(lat, lon) {
 function getPresenceAreaFromSession(session) {
     if (!session) return null;
 
+    let region = null;
     if (session.areaKey) {
-        const matchingRegion = PRESENCE_REGIONS.find(region => region.key === session.areaKey);
-        if (matchingRegion) return getPresenceAreaFromRegion(matchingRegion);
+        region = PRESENCE_REGIONS.find(r => r.key === session.areaKey);
     }
 
-    if (session.areaLat != null && session.areaLon != null) {
-        return getPresenceAreaFromCoords(session.areaLat, session.areaLon);
-    }
+    const circleLat = session.lat ?? session.areaLat ?? region?.center[0];
+    const circleLon = session.lon ?? session.areaLon ?? region?.center[1];
 
-    if (session.lat != null && session.lon != null) {
-        return getPresenceAreaFromCoords(session.lat, session.lon);
+    if (circleLat != null && circleLon != null) {
+        if (!region) region = getNearestPresenceRegion(circleLat, circleLon);
+        return {
+            areaLat: circleLat,
+            areaLon: circleLon,
+            areaKey: region?.key ?? `${circleLat.toFixed(2)},${circleLon.toFixed(2)}`,
+            areaName: region?.name ?? "Unknown Area"
+        };
     }
 
     return null;
@@ -653,11 +662,15 @@ function refreshPresenceMarkers(sessions) {
 
         const existing = viewerAreas.get(area.areaKey) || {
             count: 0,
+            intensityVotes: {},
             areaLat: area.areaLat,
             areaLon: area.areaLon,
             areaName: area.areaName
         };
         existing.count += 1;
+        if (session.intensityVote) {
+            existing.intensityVotes[session.intensityVote] = (existing.intensityVotes[session.intensityVote] || 0) + 1;
+        }
         viewerAreas.set(area.areaKey, existing);
     });
 
@@ -681,7 +694,14 @@ function refreshPresenceMarkers(sessions) {
             className: "presence-area-border"
         }).addTo(presenceMap);
 
-        border.bindTooltip(getPresenceAreaViewingText(area.count), {
+        let tooltipText = getPresenceAreaViewingText(area.count);
+        const votes = Object.entries(area.intensityVotes || {});
+        if (votes.length > 0) {
+            const voteStrings = votes.map(([code, count]) => `${count} - Person has percieved the earthquake as ${code}`);
+            tooltipText += "<br><br>" + voteStrings.join("<br>");
+        }
+
+        border.bindTooltip(tooltipText, {
             direction: "top",
             sticky: true,
             opacity: 1,
@@ -701,6 +721,8 @@ function updateMySession(lat, lon) {
         status: "online",
         displayName: viewerName || "Guest",
         role: isAdmin ? "admin" : "member",
+        lat,
+        lon,
         ...areaFields
     };
 
@@ -1037,18 +1059,22 @@ const map = L.map("map", {
 // Dedicated panes so the latest star always renders above older circles + tooltips
 map.createPane("earthquakeCircles");
 map.getPane("earthquakeCircles").style.zIndex = "450";
-map.createPane("latestEarthquake");
-map.getPane("latestEarthquake").style.zIndex = "850";
 map.createPane("earthquakeLabels");
-map.getPane("earthquakeLabels").style.zIndex = "950";
+map.getPane("earthquakeLabels").style.zIndex = "600";
 map.getPane("earthquakeLabels").style.pointerEvents = "none";
+map.createPane("latestEarthquake");
+map.getPane("latestEarthquake").style.zIndex = "700";
+map.createPane("latestEarthquakeLabel");
+map.getPane("latestEarthquakeLabel").style.zIndex = "800";
+map.getPane("latestEarthquakeLabel").style.pointerEvents = "none";
 map.createPane("earthquakePopups");
 map.getPane("earthquakePopups").style.zIndex = "1000000";
 map.getPane("earthquakePopups").style.pointerEvents = "auto";
 
 const EARTHQUAKE_POPUP_OPTIONS = {
     pane: "earthquakePopups",
-    className: "earthquake-popup-top-layer"
+    className: "earthquake-popup-top-layer",
+    maxWidth: 340
 };
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -1173,6 +1199,230 @@ function reportLinkHtml(ev) {
     return `<a href="${ev.link}" target="_blank" rel="noopener noreferrer">View report from ${getReportSourceLabel(ev)}</a>`;
 }
 
+const INTENSITY_LEVELS = [
+    {
+        code: "I",
+        name: "Scarcely Perceptible",
+        detail: "Felt by a few at rest indoors."
+    },
+    {
+        code: "II",
+        name: "Slightly Felt",
+        detail: "Hanging objects swing slightly."
+    },
+    {
+        code: "III",
+        name: "Weak",
+        detail: "Feels like a passing light truck."
+    },
+    {
+        code: "IV",
+        name: "Moderately Strong",
+        detail: "Doors and windows rattle."
+    },
+    {
+        code: "V",
+        name: "Strong",
+        detail: "Sleepers awaken; small objects fall."
+    },
+    {
+        code: "VI",
+        name: "Very Strong",
+        detail: "People lose balance; slight damage."
+    },
+    {
+        code: "VII",
+        name: "Destructive",
+        detail: "Standing difficult; moderate damage."
+    },
+    {
+        code: "VIII",
+        name: "Very Destructive",
+        detail: "Significant damage; possible landslides."
+    },
+    {
+        code: "IX",
+        name: "Devastating",
+        detail: "Widespread destruction and panic."
+    },
+    {
+        code: "X",
+        name: "Completely Devastating",
+        detail: "Total devastation; ground fissures."
+    }
+];
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function getIntensityStorageKey(eventId) {
+    return `quakeIntensityReport_${encodeURIComponent(String(eventId))}`;
+}
+
+function getIntensityLevel(code) {
+    return INTENSITY_LEVELS.find(level => level.code === code) || null;
+}
+
+function getIntensityReport(eventId) {
+    const code = localStorage.getItem(getIntensityStorageKey(eventId));
+    const level = getIntensityLevel(code);
+    return level ? { count: 1, level } : { count: 0, level: null };
+}
+
+function saveIntensityReport(eventId, code) {
+    if (!getIntensityLevel(code)) return;
+    localStorage.setItem(getIntensityStorageKey(eventId), code);
+    
+    try {
+        const ref = getPresenceSessionRef();
+        if (ref) {
+            ref.update({ intensityVote: code }).catch(() => {});
+        }
+    } catch (e) {}
+}
+
+function shouldShowIntensityPrompt(ev) {
+    // TEST MODE: return true;
+    // To show only for earthquakes above magnitude 5.5, replace the next line with:
+    // return Number(ev?.magnitude) > 5.5;
+    return Number(ev?.magnitude) > 5.5;
+}
+
+function buildMagnitudeLabel(ev) {
+    const report = getIntensityReport(ev?.id);
+    const feltLabel = report.level ? ` | ${report.level.code}` : "";
+    return `M${ev.magnitude}${feltLabel}`;
+}
+
+function buildIntensityPromptHtml(ev) {
+    if (!shouldShowIntensityPrompt(ev)) return "";
+
+    const report = getIntensityReport(ev.id);
+    const selectedCode = report.level?.code || "";
+    const reportText = report.level
+        ? `1 person felt this as ${report.level.code} (${report.level.name})`
+        : "No felt reports yet";
+
+    const buttons = INTENSITY_LEVELS.map(level => {
+        const selectedClass = level.code === selectedCode ? " is-selected" : "";
+        const selectedText = level.code === selectedCode ? `<span class="intensity-selected-label">Reported</span>` : "";
+        return `
+            <button class="intensity-option${selectedClass}" type="button" data-earthquake-id="${escapeHtml(ev.id)}" data-intensity-code="${level.code}" aria-label="${level.code} (${escapeHtml(level.name)}): ${escapeHtml(level.detail)}">
+                <span class="intensity-option-name">${level.code} (${escapeHtml(level.name)})</span>
+                ${selectedText}
+                <span class="intensity-detail" role="tooltip">${escapeHtml(level.detail)}</span>
+            </button>
+        `;
+    }).join("");
+
+    return `
+        <section class="intensity-report" data-earthquake-id="${escapeHtml(ev.id)}">
+            <div class="intensity-report-head">
+                <div>
+                    <p class="intensity-kicker">Community report</p>
+                    <h4>What did you feel?</h4>
+                </div>
+                <div class="intensity-count-circle" aria-label="${report.count} felt reports">
+                    <span>${report.count}</span>
+                    <small>${report.count === 1 ? "person" : "people"}</small>
+                </div>
+            </div>
+            <p class="intensity-report-summary">${escapeHtml(reportText)}</p>
+            <div class="intensity-options" role="group" aria-label="Perceived earthquake intensity">
+                ${buttons}
+            </div>
+        </section>
+    `;
+}
+
+function buildEarthquakePopupHtml(ev) {
+    const rawLoc = ev.location || "Unknown";
+    const cleanLoc = rawLoc.replace(/^.*? of\s+/i, '');
+
+    return `
+        <div class="earthquake-popup-card">
+            <div class="earthquake-popup-main">
+                <strong>${escapeHtml(cleanLoc)}</strong><br>
+                Mag: ${escapeHtml(ev.magnitude)}<br>
+                Depth: ${escapeHtml(ev.depth ?? "?")} km<br>
+                ${escapeHtml(formatDateTime(ev.time))}<br>
+                ${reportLinkHtml(ev)}
+            </div>
+        </div>
+    `;
+}
+
+function getIntensityNotification() {
+    let panel = document.getElementById("intensityNotification");
+    if (panel) return panel;
+
+    panel = document.createElement("aside");
+    panel.id = "intensityNotification";
+    panel.className = "intensity-notification";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-live", "polite");
+    panel.setAttribute("aria-label", "Earthquake felt report");
+    document.body.appendChild(panel);
+    return panel;
+}
+
+function showIntensityNotification(ev) {
+    if (!ev || !shouldShowIntensityPrompt(ev)) return;
+
+    const panel = getIntensityNotification();
+    panel.innerHTML = `
+        <div class="intensity-notification-shell">
+            <div class="intensity-alarm-icon" aria-hidden="true">
+                <span class="material-symbols-outlined">notifications_active</span>
+            </div>
+            <div class="intensity-notification-content">
+                <div class="intensity-notification-title-row">
+                    <div>
+                        <p class="intensity-alert-label">Earthquake felt report</p>
+                        <strong class="intensity-alert-title">${escapeHtml(ev.location || "Unknown")}</strong>
+                    </div>
+                    <button class="intensity-notification-close" type="button" aria-label="Close felt report panel">&times;</button>
+                </div>
+                ${buildIntensityPromptHtml(ev)}
+            </div>
+        </div>
+    `;
+    panel.classList.add("is-visible");
+
+    // Shift panels horizontally if intensity notification is visible
+    if (notificationPanel) {
+        notificationPanel.classList.add('intensity-shifted');
+    }
+    if (presencePanel) {
+        presencePanel.classList.add('intensity-shifted');
+    }
+}
+
+function hideIntensityNotification() {
+    const panel = document.getElementById("intensityNotification");
+    if (!panel) return;
+    panel.classList.remove("is-visible");
+
+    // Remove the shift from both panels with smooth ease-out transition
+    if (notificationPanel) {
+        notificationPanel.classList.remove('intensity-shifted');
+    }
+    if (presencePanel) {
+        presencePanel.classList.remove('intensity-shifted');
+    }
+}
+
+function bindIntensityNotification(layer, ev) {
+    if (!layer || !ev) return;
+    layer.on("click popupopen", () => showIntensityNotification(ev));
+}
+
 
 function magToRadius(mag) { return Math.max(3, 3 + mag * 3 * circleScale); }
 function magToColor(mag) {
@@ -1275,7 +1525,7 @@ function ensureLatestMarkerOnTop() {
 
             const tooltip = markerLayer.getTooltip();
             if (tooltip?._container) {
-                const tooltipPane = map.getPane("earthquakeLabels") || map.getPane("tooltipPane");
+                const tooltipPane = map.getPane("latestEarthquakeLabel") || map.getPane("earthquakeLabels") || map.getPane("tooltipPane");
                 if (tooltipPane) tooltipPane.appendChild(tooltip._container);
                 tooltip._container.style.zIndex = "100500";
                 tooltip._container.classList.add("latest-on-top");
@@ -1313,7 +1563,7 @@ function getEventStackIndex(ev, isLatest = false) {
 function ensureMagnitudeTooltip(layer, ev, isLatest = false) {
     if (!layer || !ev) return;
 
-    const label = `M${ev.magnitude}`;
+    const label = buildMagnitudeLabel(ev);
     const className = isLatest ? "magnitude-label latest" : "magnitude-label";
     const latestLabelOffset = Math.max(20, Math.round(magToRadius(Number(ev.magnitude) || 0) + 16));
     const options = {
@@ -1373,7 +1623,7 @@ function applyMarkerStacking(layer, isLatest = false) {
 
     const tooltipEl = layer.getTooltip()?._container;
     if (tooltipEl) {
-        const labelPane = map.getPane("earthquakeLabels") || map.getPane("tooltipPane");
+        const labelPane = (isLatest ? map.getPane("latestEarthquakeLabel") : null) || map.getPane("earthquakeLabels") || map.getPane("tooltipPane");
         if (labelPane && tooltipEl.parentNode !== labelPane) {
             labelPane.appendChild(tooltipEl);
         }
@@ -1511,6 +1761,62 @@ function updateCircleScaleByZoom() {
         markers.forEach(({ layer, data }) => layer.setRadius(magToRadius(data.magnitude)));
     }, 100);
 }
+
+document.addEventListener("click", event => {
+    const closeButton = event.target.closest(".intensity-notification-close");
+    if (closeButton) {
+        event.preventDefault();
+        hideIntensityNotification();
+        return;
+    }
+
+    const option = event.target.closest(".intensity-option");
+    if (!option) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const eventId = option.dataset.earthquakeId;
+    const intensityCode = option.dataset.intensityCode;
+    saveIntensityReport(eventId, intensityCode);
+
+    const markerEntry = markers.get(eventId);
+    const ev = markerEntry?.data;
+    if (!ev) return;
+
+    const report = getIntensityReport(eventId);
+    const reportRoot = option.closest(".intensity-report");
+    if (reportRoot) {
+        const summary = reportRoot.querySelector(".intensity-report-summary");
+        const countCircle = reportRoot.querySelector(".intensity-count-circle");
+
+        if (summary && report.level) {
+            summary.textContent = `1 person felt this as ${report.level.code} (${report.level.name})`;
+        }
+
+        if (countCircle) {
+            countCircle.setAttribute("aria-label", "1 felt report");
+            countCircle.innerHTML = "<span>1</span><small>person</small>";
+        }
+
+        reportRoot.querySelectorAll(".intensity-option").forEach(button => {
+            const isSelected = button.dataset.intensityCode === intensityCode;
+            button.classList.toggle("is-selected", isSelected);
+
+            const oldLabel = button.querySelector(".intensity-selected-label");
+            if (oldLabel) oldLabel.remove();
+            if (isSelected) {
+                const selectedLabel = document.createElement("span");
+                selectedLabel.className = "intensity-selected-label";
+                selectedLabel.textContent = "Reported";
+                button.querySelector(".intensity-option-name")?.after(selectedLabel);
+            }
+        });
+    }
+
+    ensureMagnitudeTooltip(markerEntry.layer, ev, markerEntry.layer === latestMarker);
+    applyMarkerStacking(markerEntry.layer, markerEntry.layer === latestMarker);
+});
 
 /************************************************************************
  * NOTIFICATION & SOUND
@@ -2678,14 +2984,9 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
                 fillOpacity: 0.8,
                 fillColor: magToColor(prevData.magnitude),
                 pane: "earthquakeCircles",
-            }).bindPopup(`
-                <strong>${prevData.location || "Unknown"}</strong><br>
-                Mag: ${prevData.magnitude}<br>
-                Depth: ${prevData.depth ?? "?"} km<br>
-                ${formatDateTime(prevData.time)}<br>
-                ${reportLinkHtml(prevData)}
-            `, EARTHQUAKE_POPUP_OPTIONS).addTo(map);
+            }).bindPopup(() => buildEarthquakePopupHtml(prevData), EARTHQUAKE_POPUP_OPTIONS).addTo(map);
 
+            bindIntensityNotification(oldCircle, prevData);
             ensureMagnitudeTooltip(oldCircle, prevData, false);
 
             // replace in the markers map
@@ -2715,13 +3016,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
             riseOnHover: true
         }).addTo(map);
 
-        markerLayer.bindPopup(`
-          <strong>${ev.location || "Unknown"}</strong><br>
-          Mag: ${ev.magnitude}<br>
-          Depth: ${ev.depth ?? "?"} km<br>
-          ${formatDateTime(ev.time)}<br>
-          ${reportLinkHtml(ev)}
-        `, EARTHQUAKE_POPUP_OPTIONS);
+        markerLayer.bindPopup(() => buildEarthquakePopupHtml(ev), EARTHQUAKE_POPUP_OPTIONS);
 
         // Add a prominent tooltip for the latest
         ensureMagnitudeTooltip(markerLayer, ev, true);
@@ -2742,19 +3037,14 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
             pane: "earthquakeCircles",
         }).addTo(map);
 
-        markerLayer.bindPopup(`
-          <strong>${ev.location || "Unknown"}</strong><br>
-          Mag: ${ev.magnitude}<br>
-          Depth: ${ev.depth ?? "?"} km<br>
-          ${formatDateTime(ev.time)}<br>
-          ${reportLinkHtml(ev)}
-        `, EARTHQUAKE_POPUP_OPTIONS);
+        markerLayer.bindPopup(() => buildEarthquakePopupHtml(ev), EARTHQUAKE_POPUP_OPTIONS);
 
         ensureMagnitudeTooltip(markerLayer, ev, false);
     }
 
     // set housekeeping props and store
     markerLayer._eventId = ev.id;
+    bindIntensityNotification(markerLayer, ev);
     markers.set(ev.id, { layer: markerLayer, data: ev });
     applyMarkerStacking(markerLayer, isLatest);
 
@@ -2777,6 +3067,7 @@ function addOrUpdateEventMarker(ev, isLatest = false, playSoundFlag = true) {
         // Animate, notify, shake map
         try { animateLatestMarker(markerLayer); } catch (err) { console.warn("animateLatestMarker error:", err); }
         try { showNotification(ev, markerLayer); } catch (err) { console.warn("showNotification error:", err); }
+        try { showIntensityNotification(ev); } catch (err) { console.warn("showIntensityNotification error:", err); }
         try { addRealShakeMapLayer(); } catch (err) { /* ignore */ }
 
         restackEarthquakeMarkers();
@@ -3488,6 +3779,9 @@ function initPWAInstallCard() {
 
     if (!card || !installBtn || !laterBtn) return;
 
+    const isDismissed = localStorage.getItem("pwaInstallDismissed") === "true";
+    if (isDismissed) return;
+
     // 1. Force-show on mobile
     const isMobile = window.matchMedia("(max-width: 768px)").matches;
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
@@ -3524,6 +3818,7 @@ function initPWAInstallCard() {
             deferredPrompt.prompt();
             const { outcome } = await deferredPrompt.userChoice;
             if (outcome === 'accepted') {
+                localStorage.setItem("pwaInstallDismissed", "true");
                 closeModalWithAnimation(card);
             }
             deferredPrompt = null;
@@ -3535,10 +3830,14 @@ function initPWAInstallCard() {
             "To install this app:\n\n" +
             "📱 iOS (Safari): Tap 'Share' button → 'Add to Home Screen'\n"
         );
+        // We also mark it dismissed if they click install but have to do it manually
+        localStorage.setItem("pwaInstallDismissed", "true");
+        closeModalWithAnimation(card);
     });
 
     laterBtn.addEventListener("click", (e) => {
         e.stopPropagation();
+        localStorage.setItem("pwaInstallDismissed", "true");
         closeModalWithAnimation(card);
     });
 }
