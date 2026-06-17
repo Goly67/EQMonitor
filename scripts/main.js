@@ -757,13 +757,21 @@ function openChatPanel() {
     forceCloseNotificationPanel();
     chatPanel.classList.add("active");
     chatPanel.setAttribute("aria-hidden", "false");
+    chatPanel.style.opacity = "1";
+    chatPanel.style.pointerEvents = "auto";
+    chatPanel.style.transform = "translateX(0)";
     chatInput?.focus();
 }
 
 function closeChatPanel() {
-    if (!chatPanel || !chatPanel.classList.contains("active")) return;
+    if (!chatPanel) return;
     chatPanel.classList.remove("active");
     chatPanel.setAttribute("aria-hidden", "true");
+    chatPanel.style.opacity = "0";
+    chatPanel.style.pointerEvents = "none";
+    chatPanel.style.transform = window.matchMedia('(max-width: 520px)').matches
+        ? "translateX(100%)"
+        : "translateX(22px)";
     chatReplyTo = null;
     chatReplyPreview?.classList.add("hidden");
 }
@@ -897,9 +905,11 @@ function watchChatUpdates() {
 setupChatEvents();
 watchChatUpdates();
 
-if (!window.matchMedia('(max-width: 640px)').matches) {
-    openChatPanel();
+function isMobileChatViewport() {
+    return window.matchMedia('(max-width: 640px)').matches;
 }
+
+closeChatPanel();
 
 function formatPresencePanelDate(timestamp) {
     const numericTimestamp = Number(timestamp);
