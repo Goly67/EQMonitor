@@ -1214,16 +1214,17 @@ select.form-control {
     max-height: 78vh;
   }
 
-  /* Mobile (<=640px): tighten compact spacing for chat rows */
+  /* Mobile (<=640px): compact chat rows only on small screens */
   .chat-messages {
-    padding: 1px 6px 1px 8px;
+    padding: 1px 5px 1px 6px;
     gap: 1px;
   }
 
   .chat-message {
     column-gap: 4px;
     row-gap: 1px;
-    margin: 0 0 2px;
+    margin: 0;
+    min-height: auto;
   }
 
   .chat-bubble-wrapper {
@@ -1237,7 +1238,7 @@ select.form-control {
 
   .chat-text {
     margin-top: 2px;
-    line-height: 1.18;
+    line-height: 1.16;
     font-size: 0.84rem;
   }
 
@@ -1281,6 +1282,7 @@ select.form-control {
   }
 
   .chat-panel-body {
+    position: relative;
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -1290,15 +1292,25 @@ select.form-control {
   .chat-messages {
     flex: 1;
     overflow-y: auto;
+    padding-bottom: calc(120px + env(safe-area-inset-bottom));
+    gap: 6px;
   }
 
   .chat-message {
-    column-gap: 6px;
+    column-gap: 4px;
+    row-gap: 1px;
+    margin: 0;
   }
 
   .chat-input-area {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
     padding: var(--space-16);
     flex-shrink: 0;
+    background: var(--color-surface);
   }
 
   .chat-avatar {

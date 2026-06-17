@@ -834,6 +834,12 @@ function setupChatEvents() {
         }
     });
 
+    ["click", "touchstart", "focus"].forEach((eventName) => {
+        chatInput?.addEventListener(eventName, (e) => {
+            e.stopPropagation();
+        });
+    });
+
     chatCancelReply?.addEventListener("click", (e) => {
         e.preventDefault();
         resetChatReply();
@@ -890,7 +896,10 @@ function watchChatUpdates() {
 
 setupChatEvents();
 watchChatUpdates();
-openChatPanel();
+
+if (!window.matchMedia('(max-width: 640px)').matches) {
+    openChatPanel();
+}
 
 function formatPresencePanelDate(timestamp) {
     const numericTimestamp = Number(timestamp);
