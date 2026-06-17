@@ -1030,11 +1030,25 @@ select.form-control {
   margin-bottom: 2px;
 }
 
+.chat-author-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
 .chat-author {
   font-weight: var(--font-weight-semibold);
   font-size: 0.78rem;
   color: var(--color-text);
   line-height: 1.05;
+}
+
+.chat-author-badge {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--color-success);
+  flex: 0 0 auto;
 }
 
 .chat-time {

@@ -246,7 +246,7 @@ function updateAdminUI(user) {
     if (adminSection) adminSection.hidden = !isAdmin;
 
     if (isAdmin) {
-        viewerName = "Developer";
+        viewerName = "Official Developer";
     } else {
         localStorage.removeItem("isAdmin");
         localStorage.removeItem("adminLoginTime");
@@ -636,7 +636,7 @@ function updatePresenceButton(count) {
 
 function getChatDisplayName() {
     if (isAdmin) {
-        return "Developer";
+        return "Official Developer";
     }
     const areaName = viewerLocation?.areaName || "Surigao City";
     return `${areaName}: Person ${chatPersonaNumber}`;
@@ -682,6 +682,10 @@ function renderChatMessages(snapshot) {
     const localSenderLabel = getChatDisplayName();
     chatMessages.innerHTML = items.map(([key, msg]) => {
         const author = escapeHtml(msg.senderLabel || localSenderLabel);
+        const isDeveloperAuthor = (msg.senderLabel || localSenderLabel) === "Official Developer";
+        const verifiedBadge = isDeveloperAuthor
+            ? '<span class="chat-author-badge material-symbols-outlined" aria-label="Verified developer">verified</span>'
+            : "";
         const time = new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const text = escapeHtml(msg.message || "");
         const replyHtml = msg.replyToText ? `
@@ -702,7 +706,10 @@ function renderChatMessages(snapshot) {
             ${actionButton}
             <div class="chat-bubble-wrapper">
               <div class="chat-message-header">
-                <span class="chat-author">${author}</span>
+                <span class="chat-author-wrap">
+                  <span class="chat-author">${author}</span>
+                  ${verifiedBadge}
+                </span>
                 <span class="chat-time">${time}</span>
               </div>
               ${replyHtml}
@@ -716,7 +723,10 @@ function renderChatMessages(snapshot) {
             <div class="chat-avatar">${avatar}</div>
             <div class="chat-bubble-wrapper">
               <div class="chat-message-header">
-                <span class="chat-author">${author}</span>
+                <span class="chat-author-wrap">
+                  <span class="chat-author">${author}</span>
+                  ${verifiedBadge}
+                </span>
                 <span class="chat-time">${time}</span>
               </div>
               ${replyHtml}
