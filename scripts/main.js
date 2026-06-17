@@ -246,7 +246,7 @@ function updateAdminUI(user) {
     if (adminSection) adminSection.hidden = !isAdmin;
 
     if (isAdmin) {
-        viewerName = "Admin (" + (user?.email || OWNER_EMAIL) + ")";
+        viewerName = "Developer";
     } else {
         localStorage.removeItem("isAdmin");
         localStorage.removeItem("adminLoginTime");
@@ -389,6 +389,26 @@ const presencePanelContent = document.getElementById("presencePanelContent");
 const presenceCountEl = document.getElementById("presenceCount");
 
 const sessionsRef = firebase.database().ref("sessions"); // count live
+const chatRef = firebase.database().ref("chat/messages");
+const chatToggleBtn = document.getElementById("chatToggleBtn");
+const chatPanel = document.getElementById("chatPanel");
+const chatPanelClose = document.getElementById("chatPanelClose");
+const chatSendBtn = document.getElementById("chatSendBtn");
+const chatInput = document.getElementById("chatInput");
+const chatMessages = document.getElementById("chatMessages");
+const chatStatus = document.getElementById("chatStatus");
+const chatCountEl = document.getElementById("chatCount");
+const chatReplyPreview = document.getElementById("chatReplyPreview");
+const chatReplyAuthor = document.getElementById("chatReplyAuthor");
+const chatCancelReply = document.getElementById("chatCancelReply");
+let chatReplyTo = null;
+let chatPersonaNumber = Number(localStorage.getItem("chatPersonaNumber") || "0") || Math.floor(Math.random() * 99) + 1;
+localStorage.setItem("chatPersonaNumber", chatPersonaNumber.toString());
+const CHAT_FILTER_PATTERNS = [
+    /\b(?:fuck|shit|bastard|idiot|dumb|stupid|asshole|damn|crap)\b/gi,
+    /\b(?:putang ina|tangina|gago|tanga|loko|bobo|ulol|burat|pakshet)\b/gi,
+    /\b(?:tanga|ulol|bobo|pakshet|gago|puta|putang|tangina)\b/gi
+];
 const presenceMarkers = new Map();
 let isAdmin = false;
 const PRESENCE_SESSION_TIMEOUT_MS = 60 * 1000;
@@ -614,6 +634,254 @@ function updatePresenceButton(count) {
     }
 }
 
+function getChatDisplayName() {
+    if (isAdmin) {
+        return "Developer";
+    }
+    const areaName = viewerLocation?.areaName || "Surigao City";
+    return `${areaName}: Person ${chatPersonaNumber}`;
+}
+
+function getChatAvatarLetter(label) {
+    if (!label) return "U";
+    const region = label.split(":")[0].trim();
+    return (region.charAt(0) || label.charAt(0) || "U").toUpperCase();
+}
+
+function sanitizeChatText(text) {
+    let cleanText = text.trim();
+    if (!cleanText) return "";
+    CHAT_FILTER_PATTERNS.forEach((pattern) => {
+        cleanText = cleanText.replace(pattern, (match) => "*".repeat(Math.max(3, match.length)));
+    });
+    return cleanText;
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function renderChatMessages(snapshot) {
+    const data = snapshot.val() || {};
+    const items = Object.entries(data)
+        .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0))
+        .slice(-50);
+
+    if (items.length === 0) {
+        chatMessages.innerHTML = '<div class="chat-empty">No messages yet. Start the conversation.</div>';
+        chatCountEl.textContent = "0 messages";
+        return;
+    }
+
+    chatCountEl.textContent = `${items.length} message${items.length === 1 ? "" : "s"}`;
+    const localSenderLabel = getChatDisplayName();
+    chatMessages.innerHTML = items.map(([key, msg]) => {
+        const author = escapeHtml(msg.senderLabel || localSenderLabel);
+        const time = new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const text = escapeHtml(msg.message || "");
+        const replyHtml = msg.replyToText ? `
+            <div class="chat-reply-card">
+              <strong>${escapeHtml(msg.replyToAuthor || "someone")}</strong>
+              <div>${escapeHtml(msg.replyToText)}</div>
+            </div>
+        ` : "";
+        const avatar = getChatAvatarLetter(msg.senderLabel || author);
+        const isOwnMessage = !!msg.senderId && msg.senderId === viewerId || msg.senderLabel === localSenderLabel;
+        const messageClass = isOwnMessage ? "chat-message chat-message--own" : "chat-message";
+        const actionButton = `
+          <button class="chat-action-btn" data-chat-reply="${key}" aria-label="Reply to this message" type="button">
+            <span class="material-symbols-outlined">reply</span>
+          </button>`;
+        const ownMessageMarkup = `
+          <div class="${messageClass}" data-chat-id="${key}">
+            ${actionButton}
+            <div class="chat-bubble-wrapper">
+              <div class="chat-message-header">
+                <span class="chat-author">${author}</span>
+                <span class="chat-time">${time}</span>
+              </div>
+              ${replyHtml}
+              <div class="chat-text">${text}</div>
+            </div>
+            <div class="chat-avatar">${avatar}</div>
+          </div>`;
+
+        const otherMessageMarkup = `
+          <div class="${messageClass}" data-chat-id="${key}">
+            <div class="chat-avatar">${avatar}</div>
+            <div class="chat-bubble-wrapper">
+              <div class="chat-message-header">
+                <span class="chat-author">${author}</span>
+                <span class="chat-time">${time}</span>
+              </div>
+              ${replyHtml}
+              <div class="chat-text">${text}</div>
+            </div>
+            ${actionButton}
+          </div>`;
+
+        return isOwnMessage ? ownMessageMarkup : otherMessageMarkup;
+    }).join("");
+}
+
+function setChatStatus(message, type = "info") {
+    if (!chatStatus) return;
+    chatStatus.textContent = message;
+    if (type === "error") {
+        chatStatus.style.color = "var(--color-error)";
+    } else if (type === "success") {
+        chatStatus.style.color = "var(--color-success)";
+    } else {
+        chatStatus.style.color = "var(--color-text-secondary)";
+    }
+}
+
+function openChatPanel() {
+    if (!chatPanel) return;
+    closePresencePanel();
+    forceCloseNotificationPanel();
+    chatPanel.classList.add("active");
+    chatPanel.setAttribute("aria-hidden", "false");
+    chatInput?.focus();
+}
+
+function closeChatPanel() {
+    if (!chatPanel || !chatPanel.classList.contains("active")) return;
+    chatPanel.classList.remove("active");
+    chatPanel.setAttribute("aria-hidden", "true");
+    chatReplyTo = null;
+    chatReplyPreview?.classList.add("hidden");
+}
+
+function resetChatReply() {
+    chatReplyTo = null;
+    if (chatReplyPreview) {
+        chatReplyPreview.classList.add("hidden");
+    }
+}
+
+function sendChatMessage() {
+    if (!chatInput) return;
+    const rawText = chatInput.value || "";
+    const cleanedText = sanitizeChatText(rawText);
+    if (!cleanedText) {
+        setChatStatus("Enter a message before sending.", "error");
+        return;
+    }
+
+    const messagePayload = {
+        message: cleanedText,
+        senderLabel: getChatDisplayName(),
+        senderId: viewerId,
+        createdAt: Date.now()
+    };
+
+    if (chatReplyTo && chatReplyTo.message) {
+        messagePayload.replyToMessageId = chatReplyTo.id;
+        messagePayload.replyToAuthor = chatReplyTo.senderLabel;
+        messagePayload.replyToText = chatReplyTo.message;
+    }
+
+    chatRef.push(messagePayload).then(() => {
+        chatInput.value = "";
+        resetChatReply();
+        setChatStatus("Message sent.", "success");
+    }).catch((error) => {
+        console.error("Chat send failed:", error);
+        setChatStatus("Unable to send. Try again.", "error");
+    });
+}
+
+function setupChatEvents() {
+    chatToggleBtn?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (chatPanel?.classList.contains("active")) {
+            closeChatPanel();
+        } else {
+            openChatPanel();
+        }
+    });
+
+    chatPanelClose?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeChatPanel();
+    });
+
+    chatSendBtn?.addEventListener("click", (e) => {
+        e.preventDefault();
+        sendChatMessage();
+    });
+
+    chatInput?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage();
+        }
+    });
+
+    chatCancelReply?.addEventListener("click", (e) => {
+        e.preventDefault();
+        resetChatReply();
+    });
+
+    chatMessages?.addEventListener("click", (e) => {
+        const replyButton = e.target.closest("[data-chat-reply]");
+        if (!replyButton) return;
+        const messageId = replyButton.getAttribute("data-chat-reply");
+        const messageNode = replyButton.closest(".chat-message");
+        if (!messageId || !messageNode) return;
+
+        const author = messageNode.querySelector(".chat-author")?.textContent || "someone";
+        const messageText = messageNode.querySelector(".chat-text")?.textContent || "";
+        chatReplyTo = {
+            id: messageId,
+            senderLabel: author,
+            message: messageText
+        };
+        if (chatReplyAuthor) {
+            chatReplyAuthor.textContent = author;
+        }
+        chatReplyPreview?.classList.remove("hidden");
+        chatInput?.focus();
+    });
+}
+
+function removeExpiredChatMessages() {
+    const expirationCutoff = Date.now() - 12 * 60 * 60 * 1000;
+    chatRef.orderByChild('createdAt').endAt(expirationCutoff).once('value', (snapshot) => {
+        snapshot.forEach((child) => {
+            child.ref.remove().catch((error) => {
+                console.warn('Failed to remove expired chat message:', error);
+            });
+        });
+    });
+}
+
+function watchChatUpdates() {
+    removeExpiredChatMessages();
+    chatRef.limitToLast(50).on("value", (snapshot) => {
+        renderChatMessages(snapshot);
+        if (snapshot.exists()) {
+            setChatStatus("Connected to chat.", "success");
+        } else {
+            setChatStatus("No messages yet. Connected.", "info");
+        }
+        removeExpiredChatMessages();
+    }, (error) => {
+        console.error("Chat read failed:", error);
+        setChatStatus("Unable to load chat. Please refresh.", "error");
+    });
+}
+
+setupChatEvents();
+watchChatUpdates();
+openChatPanel();
+
 function formatPresencePanelDate(timestamp) {
     const numericTimestamp = Number(timestamp);
     const date = Number.isFinite(numericTimestamp) ? new Date(numericTimestamp) : new Date();
@@ -773,7 +1041,17 @@ setInterval(() => {
 
 // Remove session on unload
 window.addEventListener("beforeunload", () => {
+    stopPolling();
     sessionsRef.child(viewerId).remove();
+});
+
+// Handle page restore from back-forward cache
+window.addEventListener("pageshow", (event) => {
+    if (event.persisted) {
+        console.log("[PageShow] Page restored from back-forward cache - restarting services");
+        startPolling();
+        startPresenceAreaTracking();
+    }
 });
 
 function startPresenceAreaTracking() {
@@ -2270,6 +2548,8 @@ function initPresenceTracking() {
     document.addEventListener("visibilitychange", () => {
         if (!presenceSessionRef) return;
         if (document.hidden) {
+            console.log("[Visibility] Page became hidden - stopping polling");
+            stopPolling();
             presenceSessionRef
                 .update({
                     lastSeen: Date.now(),
@@ -2283,6 +2563,19 @@ function initPresenceTracking() {
                     status: "online"
                 })
                 .catch(() => { });
+            // Restart polling and geolocation when page becomes visible
+            console.log("[Visibility] Page became visible - restarting polling and geolocation");
+            startPolling();
+            startPresenceAreaTracking();
+            
+            // Restore user marker if needed
+            try {
+                if (userLocation && !userMarker && map) {
+                    addUserMarker();
+                }
+            } catch (err) {
+                console.warn("[Visibility] Error restoring user marker:", err);
+            }
         }
     });
 }
@@ -2361,15 +2654,24 @@ presencePanelClose.addEventListener("click", (e) => {
 presencePanel.addEventListener("click", (e) => {
     e.stopPropagation();
 });
+chatPanel?.addEventListener("click", (e) => {
+    e.stopPropagation();
+});
 
 // ===== Close when clicking outside =====
 document.addEventListener("click", (e) => {
-    const clickedOutside =
+    const clickedOutsidePresence =
         !presencePanel.contains(e.target) &&
         !presenceBtn.contains(e.target);
+    const clickedOutsideChat =
+        chatPanel && !chatPanel.contains(e.target) &&
+        !chatToggleBtn.contains(e.target);
 
-    if (presencePanel.classList.contains("active") && clickedOutside) {
+    if (presencePanel.classList.contains("active") && clickedOutsidePresence) {
         closePresencePanel();
+    }
+    if (chatPanel?.classList.contains("active") && clickedOutsideChat) {
+        closeChatPanel();
     }
 });
 

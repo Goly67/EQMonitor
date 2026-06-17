@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="utf-8" />
-  <meta name="version" content="EQ-0615S26" />
+  <meta name="version" content="EQ-0617S26" />
   <title>Earthquake Monitoring System</title>
   <link rel="icon" href="logo.png" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -50,7 +50,7 @@
   <div class="header-bar">
     <div style="display: flex; align-items: center; gap: 10px;">
       <h1 class="header-title">EQMonitor</h1>
-      <span class="version-badge">EQ-0615S26</span>
+      <span class="version-badge">EQ-0617S26</span>
     </div>
     <div class="navbar-controls">
       <button class="burger-menu-btn" id="burgerMenuBtn" title="Toggle menu">
@@ -66,6 +66,10 @@
       <button class="presence-btn" id="presenceBtn" title="Who is viewing now?">
         <span class="presence-dot material-symbols-outlined">visibility</span>
         <span class="presence-count" id="presenceCount">0</span>
+      </button>
+      <button class="chat-toggle-btn" id="chatToggleBtn" title="Open chat">
+        <span class="material-symbols-outlined">chat_bubble</span>
+        <span class="chat-toggle-label">Chat</span>
       </button>
     </div>
   </div>
@@ -113,8 +117,54 @@
       <div class="presence-panel-empty">No one else is viewing right now.</div>
     </div>
   </div>
-  <!-- Map -->
-  <div id="map"></div>
+
+  <div class="app-content">
+    <div id="map"></div>
+    <div id="chatPanel" class="chat-panel" aria-hidden="true">
+      <div class="chat-panel-header">
+        <div>
+          <h6>Live Chat</h6>
+          <p class="chat-panel-meta">Talk anonymously with other viewers.</p>
+        </div>
+        <button id="chatPanelClose" class="chat-panel-close" aria-label="Close chat">&times;</button>
+      </div>
+      <div class="chat-panel-body">
+        <div class="chat-status-bar">
+          <span id="chatStatus">Connecting to chat...</span>
+          <span id="chatCount" class="chat-count">0 messages</span>
+        </div>
+        <div id="chatMessages" class="chat-messages" aria-live="polite">
+          <div class="chat-skeleton-list" aria-hidden="true">
+            <div class="chat-skeleton-card">
+              <div class="chat-skeleton-avatar"></div>
+              <div class="chat-skeleton-body">
+                <div class="chat-skeleton-line chat-skeleton-line--short"></div>
+                <div class="chat-skeleton-line"></div>
+                <div class="chat-skeleton-line chat-skeleton-line--tiny"></div>
+              </div>
+            </div>
+            <div class="chat-skeleton-card">
+              <div class="chat-skeleton-avatar"></div>
+              <div class="chat-skeleton-body">
+                <div class="chat-skeleton-line chat-skeleton-line--short"></div>
+                <div class="chat-skeleton-line"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <div id="chatReplyPreview" class="chat-reply-preview hidden">
+            Replying to <strong id="chatReplyAuthor">someone</strong>
+            <button id="chatCancelReply" class="chat-reply-cancel" type="button">Cancel</button>
+          </div>
+          <textarea id="chatInput" class="form-control" rows="3" placeholder="Type your message..."></textarea>
+          <div class="chat-input-actions">
+            <button id="chatSendBtn" class="btn btn--primary" type="button">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Control panel (burger menu) -->
   <div class="control-panel" id="controls">
