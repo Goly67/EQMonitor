@@ -10,6 +10,7 @@
   <link rel="manifest" href="manifest.json">
 
   <!-- PWA / Apple home screen -->
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Seismic Monitor">
@@ -69,6 +70,7 @@
       </button>
       <button class="chat-toggle-btn" id="chatToggleBtn" title="Open chat">
         <span class="material-symbols-outlined">chat_bubble</span>
+        <span class="chat-badge" id="chatBadge" style="display: none;">0</span>
         <span class="chat-toggle-label">Chat</span>
       </button>
     </div>
@@ -242,7 +244,6 @@
 </footer>
 
 
-  <script src="https://unpkg.com/esri-leaflet@3.0.10/dist/esri-leaflet.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>

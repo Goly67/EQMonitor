@@ -761,6 +761,7 @@ select.form-control {
 }
 
 .chat-toggle-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--space-6);
@@ -1293,7 +1294,7 @@ select.form-control {
     flex: 1;
     overflow-y: auto;
     padding-bottom: calc(120px + env(safe-area-inset-bottom));
-    gap: 6px;
+    gap: 3px;
   }
 
   .chat-message {
@@ -2214,6 +2215,23 @@ body {
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-bold);
     box-shadow: 0 var(--space-2) var(--space-8) rgba(var(--color-error-rgb), 0.6);
+}
+
+.chat-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: var(--color-error);
+    color: var(--color-white);
+    border-radius: var(--radius-full);
+    width: var(--space-20);
+    height: var(--space-20);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    box-shadow: 0 var(--space-2) var(--space-8) rgba(33, 128, 141, 0.6);
 }
 
 .burger-menu-btn {
@@ -3742,6 +3760,14 @@ input[type=range]::-moz-range-thumb {
         font-size: var(--font-size-xs);
     }
 
+    .chat-badge {
+        width: var(--space-16);
+        height: var(--space-16);
+        font-size: var(--font-size-xs);
+        background: var(--color-error);
+        background: var(--color-error);
+    }
+
     .notification-panel {
         top: 66px;
         right: var(--space-12);
@@ -3966,6 +3992,12 @@ input[type=range]::-moz-range-thumb {
     }
 
     .notification-badge {
+        width: var(--space-16);
+        height: var(--space-16);
+        font-size: var(--font-size-xs);
+    }
+
+    .chat-badge {
         width: var(--space-16);
         height: var(--space-16);
         font-size: var(--font-size-xs);

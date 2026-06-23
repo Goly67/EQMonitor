@@ -398,6 +398,7 @@ const chatInput = document.getElementById("chatInput");
 const chatMessages = document.getElementById("chatMessages");
 const chatStatus = document.getElementById("chatStatus");
 const chatCountEl = document.getElementById("chatCount");
+const chatBadge = document.getElementById("chatBadge");
 const chatReplyPreview = document.getElementById("chatReplyPreview");
 const chatReplyAuthor = document.getElementById("chatReplyAuthor");
 const chatCancelReply = document.getElementById("chatCancelReply");
@@ -412,7 +413,7 @@ const CHAT_FILTER_PATTERNS = [
 const presenceMarkers = new Map();
 let isAdmin = false;
 const PRESENCE_SESSION_TIMEOUT_MS = 60 * 1000;
-const PRESENCE_AREA_RADIUS_METERS = 28000;
+const PRESENCE_AREA_RADIUS_METERS = 120000;
 const PRESENCE_PANEL_DATE_FORMAT = {
     month: "short",
     day: "numeric",
@@ -456,10 +457,25 @@ let viewerLocation = null;
 
 function getActivePresenceEntries(sessions) {
     const cutoff = Date.now() - PRESENCE_SESSION_TIMEOUT_MS;
-    return Object.entries(sessions || {}).filter(([, s]) => {
-        if (!s || s.status === "offline") return false;
-        return !s.lastSeen || s.lastSeen >= cutoff;
+    const result = Object.entries(sessions || {}).filter(([id, s]) => {
+        if (!s) {
+            console.log("[Presence] Filtering out empty session:", id);
+            return false;
+        }
+        if (s.status === "offline") {
+            console.log("[Presence] Filtering out offline session:", id);
+            return false;
+        }
+        const lastSeen = s.lastSeen || 0;
+        if (lastSeen < cutoff) {
+            console.log("[Presence] Filtering out stale session:", id, "lastSeen:", lastSeen, "cutoff:", cutoff);
+            return false;
+        }
+        console.log("[Presence] Including session:", id, "lastSeen:", lastSeen, "status:", s.status);
+        return true;
     });
+    console.log("[Presence] getActivePresenceEntries result count:", result.length, "from total:", Object.keys(sessions || {}).length);
+    return result;
 }
 
 function getPresenceViewingText(count) {
@@ -517,41 +533,66 @@ function getPresenceAreaFromCoords(lat, lon) {
 }
 
 function getPresenceAreaFromSession(session) {
-    if (!session) return null;
+    if (!session) {
+        console.log("[Presence] getPresenceAreaFromSession: session is null/undefined");
+        return null;
+    }
 
     let region = null;
     if (session.areaKey) {
         region = PRESENCE_REGIONS.find(r => r.key === session.areaKey);
+        console.log("[Presence] Found region by areaKey:", session.areaKey, "->", region);
     }
 
-    const circleLat = session.lat ?? session.areaLat ?? region?.center[0];
-    const circleLon = session.lon ?? session.areaLon ?? region?.center[1];
+    const rawCircleLat = session.areaLat ?? region?.center[0] ?? session.lat;
+    const rawCircleLon = session.areaLon ?? region?.center[1] ?? session.lon;
+    const circleLat = Number(rawCircleLat);
+    const circleLon = Number(rawCircleLon);
+    
+    console.log("[Presence] getPresenceAreaFromSession - session:", session, "circleLat:", circleLat, "circleLon:", circleLon);
 
-    if (circleLat != null && circleLon != null) {
+    if (Number.isFinite(circleLat) && Number.isFinite(circleLon)) {
         if (!region) region = getNearestPresenceRegion(circleLat, circleLon);
-        return {
+        const result = {
             areaLat: circleLat,
             areaLon: circleLon,
             areaKey: region?.key ?? `${circleLat.toFixed(2)},${circleLon.toFixed(2)}`,
-            areaName: region?.name ?? "Unknown Area"
+            areaName: session.areaName || region?.name || "Unknown Area"
         };
+        console.log("[Presence] getPresenceAreaFromSession returning:", result);
+        return result;
     }
 
+    console.log("[Presence] getPresenceAreaFromSession returning null - no coordinates");
     return null;
 }
 
 function getPresenceAreaFields() {
     if (!viewerLocation) {
-        return { areaLat: null, areaLon: null, areaKey: null, areaName: null, lat: null, lon: null };
+        // Use default area (center of Philippines) while waiting for geolocation
+        return {
+            areaLat: 12.5,
+            areaLon: 122.5,
+            areaKey: "default",
+            areaName: "Philippines"
+        };
     }
 
     return {
         areaLat: viewerLocation.areaLat,
         areaLon: viewerLocation.areaLon,
         areaKey: viewerLocation.areaKey,
-        areaName: viewerLocation.areaName,
-        lat: null,
-        lon: null
+        areaName: viewerLocation.areaName
+    };
+}
+
+function getPresenceStatusFields(status = "online") {
+    return {
+        lastSeen: Date.now(),
+        status,
+        displayName: viewerName || "Guest",
+        role: isAdmin ? "admin" : "member",
+        ...getPresenceAreaFields()
     };
 }
 
@@ -598,18 +639,43 @@ function ensurePresencePrivacyStyles() {
 
         .leaflet-interactive.presence-area-border {
             cursor: help;
-            filter: drop-shadow(0 0 6px rgba(33, 128, 141, 0.35));
+            filter: drop-shadow(0 0 8px rgba(33, 128, 141, 0.5));
+            transition: filter 0.2s ease;
+        }
+
+        .leaflet-interactive.presence-area-border:hover {
+            filter: drop-shadow(0 0 12px rgba(33, 128, 141, 0.8));
+            stroke-width: 5px !important;
         }
 
         .leaflet-tooltip.presence-area-tooltip {
-            border: 1px solid rgba(33, 128, 141, 0.45);
+            border: 2px solid rgba(33, 128, 141, 0.6);
             border-radius: 8px;
-            padding: 6px 9px;
+            padding: 10px 12px;
             color: #172526;
-            background: rgba(255, 255, 255, 0.96);
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-            font-size: 12px;
-            font-weight: 700;
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 8px 24px rgba(33, 128, 141, 0.25);
+            font-size: 13px;
+            font-weight: 600;
+            max-width: 280px;
+            line-height: 1.5;
+        }
+
+        /* Radar pulse animation for active regions */
+        @keyframes radarPulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(33, 128, 141, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 20px rgba(33, 128, 141, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 20px rgba(33, 128, 141, 0);
+            }
+        }
+
+        .presence-area-border.active {
+            animation: radarPulse 2s infinite;
         }
 
     `;
@@ -675,10 +741,27 @@ function renderChatMessages(snapshot) {
     if (items.length === 0) {
         chatMessages.innerHTML = '<div class="chat-empty">No messages yet. Start the conversation.</div>';
         chatCountEl.textContent = "0 messages";
+        // Hide badge when no messages
+        if (chatBadge) {
+            chatBadge.style.display = 'none';
+        }
         return;
     }
 
     chatCountEl.textContent = `${items.length} message${items.length === 1 ? "" : "s"}`;
+    
+    // Update chat badge - show only if chat panel is NOT open
+    if (chatBadge) {
+        const isChatPanelOpen = chatPanel?.classList.contains("active") || false;
+        if (isChatPanelOpen) {
+            // Chat is open, hide badge
+            chatBadge.style.display = 'none';
+        } else {
+            // Chat is closed, show badge with count
+            chatBadge.textContent = items.length;
+            chatBadge.style.display = 'flex';
+        }
+    }
     const localSenderLabel = getChatDisplayName();
     chatMessages.innerHTML = items.map(([key, msg]) => {
         const author = escapeHtml(msg.senderLabel || localSenderLabel);
@@ -761,6 +844,11 @@ function openChatPanel() {
     chatPanel.style.pointerEvents = "auto";
     chatPanel.style.transform = "translateX(0)";
     chatInput?.focus();
+    
+    // Hide badge when chat opens
+    if (chatBadge) {
+        chatBadge.style.display = 'none';
+    }
 }
 
 function closeChatPanel() {
@@ -935,8 +1023,14 @@ function buildPresencePanel(sessions) {
         const ageSec = Math.max(0, Math.floor((presenceNow - lastSeenMs) / 1000));
         const dateText = formatPresencePanelDate(lastSeenMs);
         const isSelf = id === viewerId;
-        const name = isSelf ? "You" : `Person ${anonymousViewerNumber++}`;
-        return `<div class="presence-item${isSelf ? " presence-self" : ""}"><strong>${name}</strong> &middot; ${dateText} &middot; active ${ageSec}s ago</div>`;
+        const displayName = isSelf
+            ? "You"
+            : (s.displayName ? String(s.displayName) : `Person ${anonymousViewerNumber++}`);
+        
+        // Include area name if available
+        const areaName = s.areaName || "Unknown Location";
+        
+        return `<div class="presence-item${isSelf ? " presence-self" : ""}"><strong>${displayName}</strong> · ${areaName} · ${dateText} · active ${ageSec}s ago</div>`;
     });
 
     presencePanelContent.innerHTML = privacyRows.join("");
@@ -952,10 +1046,17 @@ function refreshPresenceMarkers(sessions) {
     presenceMarkers.clear();
 
     const activeEntries = getActivePresenceEntries(sessions);
+    console.log("[Presence] Refreshing markers. Active entries:", activeEntries.length);
+    
     const viewerAreas = new Map();
-    activeEntries.forEach(([, session]) => {
+    activeEntries.forEach(([viewerId, session]) => {
+        console.log("[Presence] Processing session:", viewerId, session);
         const area = getPresenceAreaFromSession(session);
-        if (!area) return;
+        console.log("[Presence] Extracted area:", area);
+        if (!area) {
+            console.log("[Presence] No area found for session", viewerId);
+            return;
+        }
 
         const existing = viewerAreas.get(area.areaKey) || {
             count: 0,
@@ -971,38 +1072,77 @@ function refreshPresenceMarkers(sessions) {
         viewerAreas.set(area.areaKey, existing);
     });
 
-    if (typeof L === "undefined") return;
+    if (typeof L === "undefined") {
+        console.log("[Presence] Leaflet not available");
+        return;
+    }
 
     const presenceMap = getPresenceMap();
-    if (!presenceMap) return;
+    if (!presenceMap) {
+        console.log("[Presence] Map not available");
+        return;
+    }
 
-    if (viewerAreas.size === 0) return;
+    console.log("[Presence] Viewer areas to display:", viewerAreas.size);
+    if (viewerAreas.size === 0) {
+        console.log("[Presence] No viewer areas to display");
+        return;
+    }
 
     viewerAreas.forEach((area, areaKey) => {
+        // Determine circle color based on number of viewers
+        let circleColor = "#21808d";      // Default teal
+        let fillOpacity = 0.12;
+        let weight = 4;
+
+        if (area.count >= 10) {
+            circleColor = "#e74c3c";       // Red for high activity
+            fillOpacity = 0.18;
+            weight = 5;
+        } else if (area.count >= 5) {
+            circleColor = "#f39c12";       // Orange for medium activity
+            fillOpacity = 0.15;
+            weight = 4.5;
+        }
+
         const border = L.circle([area.areaLat, area.areaLon], {
+            pane: "overlayPane",
             radius: PRESENCE_AREA_RADIUS_METERS,
-            color: "#21808d",
-            weight: 3,
-            opacity: 0.95,
+            color: circleColor,
+            weight: weight,
+            opacity: 0.9,
             fill: true,
-            fillColor: "#21808d",
-            fillOpacity: 0.045,
+            fillColor: circleColor,
+            fillOpacity: fillOpacity,
             interactive: true,
-            className: "presence-area-border"
+            className: "presence-area-border active"
         }).addTo(presenceMap);
 
-        let tooltipText = getPresenceAreaViewingText(area.count);
+        // Construct detailed tooltip with HTML
+        let tooltipText = `<strong>${area.areaName}</strong><br>`;
+        tooltipText += getPresenceAreaViewingText(area.count);
+
         const votes = Object.entries(area.intensityVotes || {});
         if (votes.length > 0) {
-            const voteStrings = votes.map(([code, count]) => `${count} - Person has percieved the earthquake as ${code}`);
-            tooltipText += "<br><br>" + voteStrings.join("<br>");
+            tooltipText += "<br><br><strong>Intensity Reports:</strong>";
+            const voteStrings = votes.map(([code, count]) => {
+                return `<br>• ${code}: ${count} viewer${count > 1 ? 's' : ''}`;
+            });
+            tooltipText += voteStrings.join("");
         }
 
         border.bindTooltip(tooltipText, {
             direction: "top",
             sticky: true,
             opacity: 1,
-            className: "presence-area-tooltip"
+            className: "presence-area-tooltip",
+            offset: [0, -10]
+        });
+
+        // Add click handler to show area info
+        border.on('click', () => {
+            console.log(`[Presence] User clicked on area: ${area.areaName}, Viewers: ${area.count}`);
+            showCustomAlert(`${area.areaName}\n\n${area.count} person${area.count > 1 ? 's' : ''} viewing from this region.`);
         });
 
         presenceMarkers.set(areaKey, border);
@@ -1010,105 +1150,141 @@ function refreshPresenceMarkers(sessions) {
 }
 
 function updateMySession(lat, lon) {
-    viewerLocation = getPresenceAreaFromCoords(lat, lon);
-    const areaFields = getPresenceAreaFields();
-    const sessionData = {
-        firstSeen: Date.now(),
-        lastSeen: Date.now(),
-        status: "online",
-        displayName: viewerName || "Guest",
-        role: isAdmin ? "admin" : "member",
-        lat,
-        lon,
-        ...areaFields
-    };
-
-    const targetRef = getPresenceSessionRef();
-    targetRef.set(sessionData).catch(err => console.error("Failed updating session", err));
-}
-
-function updateLastSeenOnly() {
-    const areaFields = getPresenceAreaFields();
-    const updates = {
-        lastSeen: Date.now(),
-        displayName: viewerName || "Guest",
-        status: "online",
-        role: isAdmin ? "admin" : "member",
-        ...areaFields
-    };
-
-    const targetRef = getPresenceSessionRef();
-    targetRef.update(updates).catch(err => console.error("Failed updating last seen", err));
-}
-
-// Presence listener + viewer count
-sessionsRef.on("value", snap => {
-    const sessions = snap.val() || {};
-    const now = Date.now();
-    const cutoff = now - PRESENCE_SESSION_TIMEOUT_MS;
-
-    const activeSessions = {};
-    Object.entries(sessions).forEach(([id, s]) => {
-        if ((s.lastSeen || 0) < cutoff) {
-            sessionsRef.child(id).remove();
-            return;
-        }
-        activeSessions[id] = s;
-    });
-
-    const activeCount = Object.keys(activeSessions).length;
-    updatePresenceButton(activeCount);
-
-    buildPresencePanel(activeSessions);
-    refreshPresenceMarkers(activeSessions);
-});
-
-// Regular heartbeat for our own session
-setInterval(() => {
-    updateLastSeenOnly();
-}, 20 * 1000);
-
-// Remove session on unload
-window.addEventListener("beforeunload", () => {
-    stopPolling();
-    sessionsRef.child(viewerId).remove();
-});
-
-// Handle page restore from back-forward cache
-window.addEventListener("pageshow", (event) => {
-    if (event.persisted) {
-        console.log("[PageShow] Page restored from back-forward cache - restarting services");
-        startPolling();
-        startPresenceAreaTracking();
-    }
-});
-
-function startPresenceAreaTracking() {
-    const usedSavedLocation = updatePresenceAreaFromSavedLocation();
-
-    if (!navigator.geolocation) {
-        console.warn("Geolocation not supported; presence area border disabled.");
-        if (!usedSavedLocation) updateLastSeenOnly();
+    console.log("[Presence] Updating session with coordinates:", lat, lon);
+    
+    // Validate coordinates
+    const numLat = Number(lat);
+    const numLon = Number(lon);
+    if (!Number.isFinite(numLat) || !Number.isFinite(numLon)) {
+        console.error("[Presence] Invalid coordinates provided:", lat, lon);
         return;
     }
 
-    navigator.geolocation.watchPosition(position => {
-        updateMySession(position.coords.latitude, position.coords.longitude);
-    }, err => {
-        console.warn("Presence area geolocation failed:", err);
-        if (!usedSavedLocation) updateLastSeenOnly();
-    }, {
-        enableHighAccuracy: false,
-        maximumAge: 60000,
-        timeout: 10000
+    // Save to localStorage for offline access
+    localStorage.setItem("userLocation", JSON.stringify({
+        lat: numLat,
+        lon: numLon,
+        timestamp: Date.now()
+    }));
+
+    viewerLocation = getPresenceAreaFromCoords(numLat, numLon);
+    console.log("[Presence] Viewer location resolved:", viewerLocation);
+    
+    if (!viewerLocation) {
+        console.warn("[Presence] Could not determine viewer location from coordinates");
+        viewerLocation = {
+            areaLat: numLat,
+            areaLon: numLon,
+            areaKey: `${numLat.toFixed(2)},${numLon.toFixed(2)}`,
+            areaName: "Unknown Region"
+        };
+    }
+    
+    const areaFields = getPresenceAreaFields();
+    const sessionUpdate = {
+        lastSeen: Date.now(),
+        status: "online",
+        displayName: viewerName || "Guest",
+        role: isAdmin ? "admin" : "member",
+        ...areaFields
+    };
+    
+    console.log("[Presence] Session update payload:", sessionUpdate);
+
+    const targetRef = getPresenceSessionRef();
+    targetRef.update(sessionUpdate).catch(err => {
+        console.error("[Presence] Failed updating session:", err);
     });
 }
 
-startPresenceAreaTracking();
+function updateLastSeenOnly() {
+    const updates = getPresenceStatusFields("online");
 
-if (!viewerId) {
-    viewerId = crypto.randomUUID();
-    localStorage.setItem("viewerId", viewerId);
+    console.log("[Presence] updateLastSeenOnly:", updates);
+    const targetRef = getPresenceSessionRef();
+    targetRef.update(updates).catch(err => {
+        console.error("[Presence] Failed updating last seen:", err);
+    });
+}
+
+
+function startPresenceAreaTracking() {
+    console.log("[Presence] Starting area tracking with enhanced geolocation");
+    
+    // Clean up previous geolocation watch to avoid duplicates
+    if (presenceLocationWatch !== null) {
+        navigator.geolocation.clearWatch(presenceLocationWatch);
+        presenceLocationWatch = null;
+    }
+
+    if (presenceAreaHeartbeat !== null) {
+        clearInterval(presenceAreaHeartbeat);
+        presenceAreaHeartbeat = null;
+    }
+
+    const usedSavedLocation = updatePresenceAreaFromSavedLocation();
+    console.log("[Presence] Used saved location:", usedSavedLocation);
+
+    if (!navigator.geolocation) {
+        console.warn("[Presence] Geolocation not supported; will use default location");
+        updateLastSeenOnly();
+        return;
+    }
+
+    // Try to get the current position immediately so the region/city circle appears faster
+    const geoOptions = {
+        enableHighAccuracy: false,
+        maximumAge: 60000,  // Use cached position if less than 1 minute old
+        timeout: 15000      // Give geolocation 15 seconds to respond
+    };
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            console.log("[Presence] Got current position:", {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy
+            });
+            updateMySession(position.coords.latitude, position.coords.longitude);
+        },
+        (err) => {
+            console.warn("[Presence] Geolocation getCurrentPosition failed:", {
+                code: err.code,
+                message: err.message
+            });
+            if (!usedSavedLocation) {
+                updateLastSeenOnly();
+            }
+        },
+        geoOptions
+    );
+
+    // Watch for continuous position updates
+    presenceLocationWatch = navigator.geolocation.watchPosition(
+        (position) => {
+            console.log("[Presence] Position watch update:", {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy
+            });
+            updateMySession(position.coords.latitude, position.coords.longitude);
+        },
+        (err) => {
+            console.warn("[Presence] Geolocation watch failed:", {
+                code: err.code,
+                message: err.message
+            });
+        },
+        geoOptions
+    );
+
+    // Periodic fallback: update lastSeen every 30 seconds even if location hasn't changed
+    presenceAreaHeartbeat = setInterval(() => {
+        console.log("[Presence] Periodic heartbeat: updating lastSeen");
+        updateLastSeenOnly();
+    }, 30000);
+
+    console.log("[Presence] Area tracking started successfully");
 }
 
 let notifications = [];
@@ -2065,7 +2241,11 @@ function updateCircleScaleByZoom() {
     scaleUpdateTimeout = setTimeout(() => {
         const zoom = map.getZoom();
         circleScale = Math.max(0.2, Math.min(0.8, 1.2 - (zoom - 5) * 0.3));
-        markers.forEach(({ layer, data }) => layer.setRadius(magToRadius(data.magnitude)));
+        markers.forEach(({ layer, data }) => {
+            if (typeof layer.setRadius === "function") {
+                layer.setRadius(magToRadius(data.magnitude));
+            }
+        });
     }, 100);
 }
 
@@ -2471,6 +2651,8 @@ async function sendBrowserNotification(ev, title, message, isAlert) {
 let presenceSessionRef = null;
 let presenceAllRef = null;
 let presenceHeartbeat = null;
+let presenceAreaHeartbeat = null;
+let presenceLocationWatch = null;
 
 /**
  * Render the presence list into the panel and update the count button.
@@ -2498,15 +2680,56 @@ function formatPresenceRelativeTime(pastMs) {
  */
 function renderPresence(sessions) {
     const allSessions = sessions || {};
+    console.log("[Presence] renderPresence called with sessions:", allSessions);
 
     // Show viewer counts without exposing viewer coordinates.
     buildPresencePanel(allSessions);
     refreshPresenceMarkers(allSessions);
 
     const activeCount = getActivePresenceEntries(allSessions).length;
+    console.log("[Presence] Active count:", activeCount);
     updatePresenceButton(activeCount);
 }
 
+
+/**
+ * Initialize Firebase presence tracking.
+ */
+function stopPresenceTracking() {
+    console.log("[Presence] Stopping presence tracking");
+
+    // Clear heartbeat
+    if (presenceHeartbeat !== null) {
+        clearInterval(presenceHeartbeat);
+        presenceHeartbeat = null;
+    }
+
+    if (presenceAreaHeartbeat !== null) {
+        clearInterval(presenceAreaHeartbeat);
+        presenceAreaHeartbeat = null;
+    }
+
+    // Clear geolocation watch
+    if (presenceLocationWatch !== null) {
+        navigator.geolocation.clearWatch(presenceLocationWatch);
+        presenceLocationWatch = null;
+    }
+
+    // Detach Firebase listeners
+    if (presenceAllRef !== null) {
+        presenceAllRef.off();
+    }
+
+    // Clean up markers
+    presenceMarkers.forEach(marker => {
+        if (marker && typeof marker.remove === "function") {
+            marker.remove();
+        }
+    });
+    presenceMarkers.clear();
+
+    console.log("[Presence] Presence tracking stopped");
+}
 
 /**
  * Initialize Firebase presence tracking.
@@ -2521,18 +2744,74 @@ function initPresenceTracking() {
 
     // Session record for this viewer
     presenceSessionRef = db.ref("sessions/" + viewerId);
+    console.log("[Presence] Created session ref for viewerId:", viewerId);
+    
+    // START location tracking FIRST before creating session
+    console.log("[Presence] Starting geolocation before session creation");
+    
+    // Get initial position (will call setupPresenceSession when ready)
+    if (!navigator.geolocation) {
+        console.warn("[Presence] Geolocation not available - creating session with default location");
+        setupPresenceSession(db);
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            console.log("[Presence] Got initial position before session:", {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy
+            });
+            // Update viewerLocation with actual coordinates
+            viewerLocation = getPresenceAreaFromCoords(position.coords.latitude, position.coords.longitude);
+            console.log("[Presence] Viewer location resolved:", viewerLocation);
+            setupPresenceSession(db);
+            startPresenceAreaTracking();
+        },
+        (err) => {
+            console.warn("[Presence] Initial geolocation failed, creating session with default area:", err);
+            setupPresenceSession(db);
+            // Still try to track for future updates
+            startPresenceAreaTracking();
+        },
+        {
+            enableHighAccuracy: false,
+            maximumAge: 60000,
+            timeout: 15000
+        }
+    );
+}
+
+/**
+ * Setup the presence session in Firebase after location is ready
+ */
+function setupPresenceSession(db) {
+    if (!presenceSessionRef) {
+        console.error("[Presence] Session ref not initialized");
+        return;
+    }
+
     const now = Date.now();
     const areaFields = getPresenceAreaFields();
+    console.log("[Presence] Setting up session with area fields:", areaFields);
 
     // Set initial session data with proper error handling
+    const initialSessionData = {
+        firstSeen: now,
+        lastSeen: now,
+        status: "online",
+        displayName: viewerName || "Guest",
+        role: isAdmin ? "admin" : "member",
+        ...areaFields
+    };
+    
+    console.log("[Presence] Setting initial session data:", initialSessionData);
+    
     presenceSessionRef
-        .set({
-            firstSeen: now,
-            lastSeen: now,
-            status: "online",
-            displayName: viewerName || "Guest",
-            role: isAdmin ? "admin" : "member",
-            ...areaFields
+        .set(initialSessionData)
+        .then(() => {
+            console.log("[Presence] Initial session data set successfully with location:", areaFields);
         })
         .catch((err) => {
             console.error("[Presence] Failed to set initial session data:", err);
@@ -2545,55 +2824,117 @@ function initPresenceTracking() {
     presenceSessionRef
         .onDisconnect()
         .update({
-            lastSeen: firebase.database.ServerValue.TIMESTAMP,
+            lastSeen: Date.now(),
             status: "offline"
         })
         .catch((err) => {
             console.error("[Presence] Failed to set disconnect handler:", err);
         });
 
-    // Heartbeat to keep lastSeen fresh while the tab is open
+    // Periodic cleanup of stale sessions (older than 3 minutes - more conservative)
+    setInterval(() => {
+        const staleThreshold = Date.now() - (3 * 60 * 1000); // 3 minutes
+        sessionsRef.orderByChild("lastSeen").endAt(staleThreshold).once("value", (snap) => {
+            const staleSessions = snap.val() || {};
+            Object.keys(staleSessions).forEach((sessionId) => {
+                // Don't delete our own session
+                if (sessionId !== viewerId) {
+                    console.log("[Presence] Cleaning up stale session:", sessionId);
+                    sessionsRef.child(sessionId).remove().catch(err => {
+                        console.warn("[Presence] Could not remove stale session:", sessionId, err);
+                    });
+                }
+            });
+        }).catch(err => {
+            console.warn("[Presence] Error during stale session cleanup:", err);
+        });
+    }, 90000); // Run cleanup every 90 seconds
+
+
     presenceHeartbeat = setInterval(() => {
-        const dataUpdate = {
-            lastSeen: Date.now(),
-            status: "online",
-            displayName: viewerName || "Guest",
-            role: isAdmin ? "admin" : "member",
-            ...getPresenceAreaFields()
-        };
+        const dataUpdate = getPresenceStatusFields("online");
 
         presenceSessionRef
             .update(dataUpdate)
-            .catch(() => { });
-    }, 20000); // 20s
+            .then(() => {
+                console.log("[Presence] Heartbeat sent successfully at", new Date(dataUpdate.lastSeen).toISOString());
+            })
+            .catch((err) => {
+                console.error("[Presence] Heartbeat failed:", err);
+            });
+    }, 15000); // Heartbeat every 15 seconds for more responsive presence
 
     // Listen to all sessions to update UI in real time
     presenceAllRef = db.ref("sessions");
     presenceAllRef.on("value", (snap) => {
-        renderPresence(snap.val() || {});
+        const allSessions = snap.val() || {};
+        console.log("[Presence] Real-time listener update. Active sessions:", Object.keys(allSessions).length);
+        
+        // Render presence with real-time updates to circles
+        renderPresence(allSessions);
+        
+        // Mark the time we last received a session update
+        markUpdate();
+    });
+
+    // Listen for child additions (new users joining)
+    presenceAllRef.on("child_added", (snap) => {
+        const viewerId = snap.key;
+        const sessionData = snap.val();
+        console.log("[Presence] New viewer joined:", viewerId, sessionData?.displayName, "Area:", sessionData?.areaName);
+    });
+
+    // Listen for child removals (users leaving)
+    presenceAllRef.on("child_removed", (snap) => {
+        const viewerId = snap.key;
+        console.log("[Presence] Viewer disconnected:", viewerId);
     });
 
     // Mark offline on visibility change if needed (extra safety)
     document.addEventListener("visibilitychange", () => {
         if (!presenceSessionRef) return;
         if (document.hidden) {
-            console.log("[Visibility] Page became hidden - stopping polling");
+            console.log("[Visibility] Page became hidden - marking as offline");
             stopPolling();
+            
+            // Clear geolocation watch when hidden to save battery
+            if (presenceLocationWatch !== null) {
+                navigator.geolocation.clearWatch(presenceLocationWatch);
+                presenceLocationWatch = null;
+                console.log("[Visibility] Geolocation watch stopped");
+            }
+            
+            // Clear heartbeat when hidden
+            if (presenceHeartbeat !== null) {
+                clearInterval(presenceHeartbeat);
+                presenceHeartbeat = null;
+                console.log("[Visibility] Heartbeat stopped");
+            }
+
+            if (presenceAreaHeartbeat !== null) {
+                clearInterval(presenceAreaHeartbeat);
+                presenceAreaHeartbeat = null;
+                console.log("[Visibility] Area heartbeat stopped");
+            }
+
             presenceSessionRef
                 .update({
                     lastSeen: Date.now(),
                     status: "offline"
                 })
-                .catch(() => { });
+                .catch((err) => {
+                    console.warn("[Visibility] Failed to mark offline:", err);
+                });
         } else {
+            console.log("[Visibility] Page became visible - resuming presence tracking");
+            
             presenceSessionRef
-                .update({
-                    lastSeen: Date.now(),
-                    status: "online"
-                })
-                .catch(() => { });
+                .update(getPresenceStatusFields("online"))
+                .catch((err) => {
+                    console.warn("[Visibility] Failed to mark online:", err);
+                });
+
             // Restart polling and geolocation when page becomes visible
-            console.log("[Visibility] Page became visible - restarting polling and geolocation");
             startPolling();
             startPresenceAreaTracking();
             
