@@ -413,35 +413,12 @@ const CHAT_FILTER_PATTERNS = [
 const presenceMarkers = new Map();
 let isAdmin = false;
 const PRESENCE_SESSION_TIMEOUT_MS = 60 * 1000;
-const PRESENCE_AREA_RADIUS_METERS = 120000;
+
 const PRESENCE_PANEL_DATE_FORMAT = {
     month: "short",
     day: "numeric",
     year: "numeric"
 };
-const PRESENCE_REGIONS = [
-    { key: "ncr", name: "Metro Manila", center: [14.5995, 120.9842], bounds: [14.35, 120.85, 14.85, 121.15] },
-    { key: "car", name: "Cordillera Administrative Region", center: [16.4023, 120.5960], bounds: [15.6, 120.3, 18.0, 121.4] },
-    { key: "ilocos", name: "Ilocos Region", center: [16.0832, 120.6199], bounds: [15.6, 119.7, 18.7, 121.2] },
-    { key: "cagayan-valley", name: "Cagayan Valley", center: [17.6132, 121.7270], bounds: [15.8, 121.0, 20.0, 122.7] },
-    { key: "central-luzon", name: "Central Luzon", center: [15.4828, 120.7120], bounds: [14.7, 119.7, 16.2, 121.4] },
-    { key: "calabarzon", name: "CALABARZON", center: [14.1008, 121.0794], bounds: [13.4, 120.4, 14.8, 122.4] },
-    { key: "mimaropa", name: "MIMAROPA", center: [12.6074, 120.9842], bounds: [9.0, 117.0, 14.1, 122.2] },
-    { key: "bicol", name: "Bicol Region", center: [13.4200, 123.4137], bounds: [12.0, 122.3, 14.4, 124.5] },
-    { key: "western-visayas", name: "Western Visayas", center: [11.0050, 122.5373], bounds: [9.8, 121.6, 12.4, 123.7] },
-    { key: "central-visayas", name: "Central Visayas", center: [10.3157, 123.8854], bounds: [9.0, 123.0, 11.3, 124.5] },
-    { key: "eastern-visayas", name: "Eastern Visayas", center: [11.2448, 125.0388], bounds: [9.8, 124.0, 12.9, 126.0] },
-    { key: "zamboanga-peninsula", name: "Zamboanga Peninsula", center: [7.8383, 123.2967], bounds: [6.5, 121.8, 8.8, 123.9] },
-    { key: "northern-mindanao", name: "Northern Mindanao", center: [8.0202, 124.6857], bounds: [7.4, 123.5, 9.3, 125.7] },
-    { key: "davao", name: "Davao Region", center: [7.1907, 125.4553], bounds: [5.8, 125.0, 8.2, 126.6] },
-    { key: "soccsksargen", name: "SOCCSKSARGEN", center: [6.2707, 124.6857], bounds: [5.2, 123.4, 7.4, 125.4] },
-    { key: "surigao-del-norte", name: "Surigao del Norte", center: [9.7823, 125.4932], bounds: [9.2, 124.8, 10.2, 126.0] },
-{ key: "dinagat-islands", name: "Dinagat Islands", center: [10.1279, 125.6083], bounds: [9.8, 125.3, 10.6, 126.1] },
-{ key: "agusan-del-norte", name: "Agusan del Norte", center: [8.9475, 125.5406], bounds: [8.3, 125.0, 9.3, 125.9] },
-{ key: "surigao-del-sur", name: "Surigao del Sur", center: [9.0778, 126.1969], bounds: [7.8, 125.5, 9.5, 126.8] },
-{ key: "agusan-del-sur", name: "Agusan del Sur", center: [8.1666, 126.0154], bounds: [7.5, 125.4, 8.9, 126.6] },
-    { key: "barmm", name: "BARMM", center: [6.9568, 124.2422], bounds: [4.5, 119.0, 8.0, 125.3] }
-];
 
 // Unique viewer id persisted per browser
 let viewerId = localStorage.getItem("viewerId");
@@ -452,15 +429,6 @@ if (!viewerId) {
 
 let viewerName = "Guest";
 localStorage.setItem("viewerName", viewerName);
-
-let viewerLocation = null;
-
-const DEFAULT_PRESENCE_AREA = {
-    areaLat: 12.5,
-    areaLon: 122.5,
-    areaKey: "default",
-    areaName: "Philippines"
-};
 
 function getActivePresenceEntries(sessions) {
     const cutoff = Date.now() - PRESENCE_SESSION_TIMEOUT_MS;
@@ -495,141 +463,15 @@ function getPresenceAreaViewingText(count) {
         : `${count} people are viewing in this city or region`;
 }
 
-function isInRegionBounds(lat, lon, region) {
-    const [south, west, north, east] = region.bounds;
-    return lat >= south && lat <= north && lon >= west && lon <= east;
-}
 
-function getRegionDistanceScore(lat, lon, region) {
-    const [regionLat, regionLon] = region.center;
-    const latDiff = lat - regionLat;
-    const lonDiff = lon - regionLon;
-    return latDiff * latDiff + lonDiff * lonDiff;
-}
-
-function getNearestPresenceRegion(lat, lon) {
-    const numericLat = Number(lat);
-    const numericLon = Number(lon);
-    if (!Number.isFinite(numericLat) || !Number.isFinite(numericLon)) return null;
-
-    const matchingRegions = PRESENCE_REGIONS.filter(region => isInRegionBounds(numericLat, numericLon, region));
-    if (matchingRegions.length === 0) return null;
-
-    return matchingRegions.reduce((nearest, region) => {
-        if (!nearest) return region;
-        return getRegionDistanceScore(numericLat, numericLon, region) < getRegionDistanceScore(numericLat, numericLon, nearest)
-            ? region
-            : nearest;
-    }, null);
-}
-
-function getPresenceAreaFromRegion(region) {
-    if (!region) return null;
-
-    return {
-        areaLat: region.center[0],
-        areaLon: region.center[1],
-        areaKey: region.key,
-        areaName: region.name
-    };
-}
-
-function getPresenceAreaFromCoords(lat, lon) {
-    const region = getNearestPresenceRegion(lat, lon);
-    return getPresenceAreaFromRegion(region);
-}
-
-function getPresenceAreaFromSession(session) {
-    if (!session) {
-        console.log("[Presence] getPresenceAreaFromSession: session is null/undefined");
-        return null;
-    }
-
-    let region = null;
-    if (session.areaKey) {
-        region = PRESENCE_REGIONS.find(r => r.key === session.areaKey);
-        console.log("[Presence] Found region by areaKey:", session.areaKey, "->", region);
-    }
-
-    const fallbackArea = DEFAULT_PRESENCE_AREA;
-    const rawCircleLat = session.areaLat ?? region?.center[0] ?? session.lat ?? fallbackArea.areaLat;
-    const rawCircleLon = session.areaLon ?? region?.center[1] ?? session.lon ?? fallbackArea.areaLon;
-    const circleLat = Number(rawCircleLat);
-    const circleLon = Number(rawCircleLon);
-    
-    console.log("[Presence] getPresenceAreaFromSession - session:", session, "circleLat:", circleLat, "circleLon:", circleLon);
-
-    if (Number.isFinite(circleLat) && Number.isFinite(circleLon)) {
-        if (!region) region = getNearestPresenceRegion(circleLat, circleLon);
-        const result = {
-            areaLat: circleLat,
-            areaLon: circleLon,
-            areaKey: region?.key ?? session.areaKey ?? fallbackArea.areaKey,
-            areaName: session.areaName || region?.name || fallbackArea.areaName
-        };
-        console.log("[Presence] getPresenceAreaFromSession returning:", result);
-        return result;
-    }
-
-    console.log("[Presence] getPresenceAreaFromSession returning null - no coordinates");
-    return null;
-}
-
-function getPresenceAreaFields() {
-    if (!viewerLocation) return { ...DEFAULT_PRESENCE_AREA };
-
-    const areaLat = Number(viewerLocation.areaLat);
-    const areaLon = Number(viewerLocation.areaLon);
-    if (!Number.isFinite(areaLat) || !Number.isFinite(areaLon) || !viewerLocation.areaKey) {
-        return { ...DEFAULT_PRESENCE_AREA };
-    }
-
-    return {
-        areaLat,
-        areaLon,
-        areaKey: viewerLocation.areaKey,
-        areaName: viewerLocation.areaName || DEFAULT_PRESENCE_AREA.areaName
-    };
-}
-
-function hasValidPresenceArea(session) {
-    return !!session
-        && Number.isFinite(Number(session.areaLat))
-        && Number.isFinite(Number(session.areaLon))
-        && typeof session.areaKey === "string"
-        && session.areaKey.length > 0;
-}
 
 function getPresenceStatusFields(status = "online") {
     return {
         lastSeen: Date.now(),
         status,
         displayName: viewerName || "Guest",
-        role: isAdmin ? "admin" : "member",
-        ...getPresenceAreaFields()
+        role: isAdmin ? "admin" : "member"
     };
-}
-
-function getPresenceMap() {
-    try {
-        return map || null;
-    } catch {
-        return null;
-    }
-}
-
-function updatePresenceAreaFromSavedLocation() {
-    try {
-        const savedLocation = JSON.parse(localStorage.getItem("userLocation") || "null");
-        if (!savedLocation || savedLocation.lat == null || savedLocation.lon == null) return false;
-        const savedLat = Number(savedLocation.lat);
-        const savedLon = Number(savedLocation.lon);
-        if (!Number.isFinite(savedLat) || !Number.isFinite(savedLon)) return false;
-        updateMySession(savedLat, savedLon);
-        return true;
-    } catch {
-        return false;
-    }
 }
 
 function getPresenceSessionRef() {
@@ -1028,188 +870,24 @@ function buildPresencePanel(sessions) {
         return;
     }
 
-    const presenceNow = Date.now();
-    // Sort entries by firstSeen descending (newest users first)
-    const privacySortedEntries = allEntries.sort((a, b) => (b[1].firstSeen || 0) - (a[1].firstSeen || 0));
-    let anonymousViewerNumber = 1;
-    const privacyRows = privacySortedEntries.map(([id, s]) => {
-        const lastSeenMs = Number.isFinite(Number(s.lastSeen)) ? Number(s.lastSeen) : presenceNow;
-        const ageSec = Math.max(0, Math.floor((presenceNow - lastSeenMs) / 1000));
-        const dateText = formatPresencePanelDate(lastSeenMs);
-        const isSelf = id === viewerId;
-        const displayName = isSelf
-            ? "You"
-            : (s.displayName ? String(s.displayName) : `Person ${anonymousViewerNumber++}`);
-        
-        // Include area name if available
-        const areaName = s.areaName || "Unknown Location";
-        
-        return `<div class="presence-item${isSelf ? " presence-self" : ""}"><strong>${displayName}</strong> · ${areaName} · ${dateText} · active ${ageSec}s ago</div>`;
-    });
-
-    presencePanelContent.innerHTML = privacyRows.join("");
+    // Simple viewer count display - no user details or locations shown
+    const countText = activeCount === 1 ? "1 person is viewing" : `${activeCount} people are viewing`;
+    presencePanelContent.innerHTML = `<div class="presence-panel-count" style="padding: 16px; text-align: center; font-size: 16px; font-weight: 600;">${countText}</div>`;
     return;
 }
 
 function refreshPresenceMarkers(sessions) {
+    // Without location services, we just count active users instead of displaying circles
     presenceMarkers.forEach(marker => {
         if (marker && typeof marker.remove === "function") {
             marker.remove();
         }
     });
     presenceMarkers.clear();
-
-    const activeEntries = getActivePresenceEntries(sessions);
-    console.log("[Presence] Refreshing markers. Active entries:", activeEntries.length);
-    
-    const viewerAreas = new Map();
-    activeEntries.forEach(([viewerId, session]) => {
-        console.log("[Presence] Processing session:", viewerId, session);
-        const area = getPresenceAreaFromSession(session);
-        console.log("[Presence] Extracted area:", area);
-        if (!area) {
-            console.log("[Presence] No area found for session", viewerId);
-            return;
-        }
-
-        const existing = viewerAreas.get(area.areaKey) || {
-            count: 0,
-            intensityVotes: {},
-            areaLat: area.areaLat,
-            areaLon: area.areaLon,
-            areaName: area.areaName
-        };
-        existing.count += 1;
-        if (session.intensityVote) {
-            existing.intensityVotes[session.intensityVote] = (existing.intensityVotes[session.intensityVote] || 0) + 1;
-        }
-        viewerAreas.set(area.areaKey, existing);
-    });
-
-    if (typeof L === "undefined") {
-        console.log("[Presence] Leaflet not available");
-        return;
-    }
-
-    const presenceMap = getPresenceMap();
-    if (!presenceMap) {
-        console.log("[Presence] Map not available");
-        return;
-    }
-
-    console.log("[Presence] Viewer areas to display:", viewerAreas.size);
-    if (viewerAreas.size === 0) {
-        console.log("[Presence] No viewer areas to display");
-        return;
-    }
-
-    viewerAreas.forEach((area, areaKey) => {
-        // Determine circle color based on number of viewers
-        let circleColor = "#21808d";      // Default teal
-        let fillOpacity = 0.12;
-        let weight = 4;
-
-        if (area.count >= 10) {
-            circleColor = "#e74c3c";       // Red for high activity
-            fillOpacity = 0.18;
-            weight = 5;
-        } else if (area.count >= 5) {
-            circleColor = "#f39c12";       // Orange for medium activity
-            fillOpacity = 0.15;
-            weight = 4.5;
-        }
-
-        const border = L.circle([area.areaLat, area.areaLon], {
-            pane: "overlayPane",
-            radius: PRESENCE_AREA_RADIUS_METERS,
-            color: circleColor,
-            weight: weight,
-            opacity: 0.9,
-            fill: true,
-            fillColor: circleColor,
-            fillOpacity: fillOpacity,
-            interactive: true,
-            className: "presence-area-border active"
-        }).addTo(presenceMap);
-
-        // Construct detailed tooltip with HTML
-        let tooltipText = `<strong>${area.areaName}</strong><br>`;
-        tooltipText += getPresenceAreaViewingText(area.count);
-
-        const votes = Object.entries(area.intensityVotes || {});
-        if (votes.length > 0) {
-            tooltipText += "<br><br><strong>Intensity Reports:</strong>";
-            const voteStrings = votes.map(([code, count]) => {
-                return `<br>• ${code}: ${count} viewer${count > 1 ? 's' : ''}`;
-            });
-            tooltipText += voteStrings.join("");
-        }
-
-        border.bindTooltip(tooltipText, {
-            direction: "top",
-            sticky: true,
-            opacity: 1,
-            className: "presence-area-tooltip",
-            offset: [0, -10]
-        });
-
-        // Add click handler to show area info
-        border.on('click', () => {
-            console.log(`[Presence] User clicked on area: ${area.areaName}, Viewers: ${area.count}`);
-            showCustomAlert(`${area.areaName}\n\n${area.count} person${area.count > 1 ? 's' : ''} viewing from this region.`);
-        });
-
-        presenceMarkers.set(areaKey, border);
-    });
+    console.log("[Presence] Presence circles disabled (location services removed)");
 }
 
-function updateMySession(lat, lon) {
-    console.log("[Presence] Updating session with coordinates:", lat, lon);
-    
-    // Validate coordinates
-    const numLat = Number(lat);
-    const numLon = Number(lon);
-    if (!Number.isFinite(numLat) || !Number.isFinite(numLon)) {
-        console.error("[Presence] Invalid coordinates provided:", lat, lon);
-        return;
-    }
 
-    // Save to localStorage for offline access
-    localStorage.setItem("userLocation", JSON.stringify({
-        lat: numLat,
-        lon: numLon,
-        timestamp: Date.now()
-    }));
-
-    viewerLocation = getPresenceAreaFromCoords(numLat, numLon);
-    console.log("[Presence] Viewer location resolved:", viewerLocation);
-    
-    if (!viewerLocation) {
-        console.warn("[Presence] Could not determine viewer location from coordinates");
-        viewerLocation = {
-            areaLat: numLat,
-            areaLon: numLon,
-            areaKey: `${numLat.toFixed(2)},${numLon.toFixed(2)}`,
-            areaName: "Unknown Region"
-        };
-    }
-    
-    const areaFields = getPresenceAreaFields();
-    const sessionUpdate = {
-        lastSeen: Date.now(),
-        status: "online",
-        displayName: viewerName || "Guest",
-        role: isAdmin ? "admin" : "member",
-        ...areaFields
-    };
-    
-    console.log("[Presence] Session update payload:", sessionUpdate);
-
-    const targetRef = getPresenceSessionRef();
-    targetRef.update(sessionUpdate).catch(err => {
-        console.error("[Presence] Failed updating session:", err);
-    });
-}
 
 function updateLastSeenOnly() {
     const updates = getPresenceStatusFields("online");
@@ -1222,84 +900,7 @@ function updateLastSeenOnly() {
 }
 
 
-function startPresenceAreaTracking() {
-    console.log("[Presence] Starting area tracking with enhanced geolocation");
-    
-    // Clean up previous geolocation watch to avoid duplicates
-    if (presenceLocationWatch !== null) {
-        navigator.geolocation.clearWatch(presenceLocationWatch);
-        presenceLocationWatch = null;
-    }
 
-    if (presenceAreaHeartbeat !== null) {
-        clearInterval(presenceAreaHeartbeat);
-        presenceAreaHeartbeat = null;
-    }
-
-    const usedSavedLocation = updatePresenceAreaFromSavedLocation();
-    console.log("[Presence] Used saved location:", usedSavedLocation);
-
-    if (!navigator.geolocation) {
-        console.warn("[Presence] Geolocation not supported; will use default location");
-        updateLastSeenOnly();
-        return;
-    }
-
-    // Try to get the current position immediately so the region/city circle appears faster
-    const geoOptions = {
-        enableHighAccuracy: false,
-        maximumAge: 60000,  // Use cached position if less than 1 minute old
-        timeout: 15000      // Give geolocation 15 seconds to respond
-    };
-
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            console.log("[Presence] Got current position:", {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy
-            });
-            updateMySession(position.coords.latitude, position.coords.longitude);
-        },
-        (err) => {
-            console.warn("[Presence] Geolocation getCurrentPosition failed:", {
-                code: err.code,
-                message: err.message
-            });
-            if (!usedSavedLocation) {
-                updateLastSeenOnly();
-            }
-        },
-        geoOptions
-    );
-
-    // Watch for continuous position updates
-    presenceLocationWatch = navigator.geolocation.watchPosition(
-        (position) => {
-            console.log("[Presence] Position watch update:", {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy
-            });
-            updateMySession(position.coords.latitude, position.coords.longitude);
-        },
-        (err) => {
-            console.warn("[Presence] Geolocation watch failed:", {
-                code: err.code,
-                message: err.message
-            });
-        },
-        geoOptions
-    );
-
-    // Periodic fallback: update lastSeen every 30 seconds even if location hasn't changed
-    presenceAreaHeartbeat = setInterval(() => {
-        console.log("[Presence] Periodic heartbeat: updating lastSeen");
-        updateLastSeenOnly();
-    }, 30000);
-
-    console.log("[Presence] Area tracking started successfully");
-}
 
 let notifications = [];
 
@@ -2665,8 +2266,7 @@ async function sendBrowserNotification(ev, title, message, isAlert) {
 let presenceSessionRef = null;
 let presenceAllRef = null;
 let presenceHeartbeat = null;
-let presenceAreaHeartbeat = null;
-let presenceLocationWatch = null;
+let presenceAreaHeartbeat = null; // No longer used - location services removed
 let presenceSessionStarted = false;
 let presenceCleanupHeartbeat = null;
 
@@ -2696,20 +2296,14 @@ function formatPresenceRelativeTime(pastMs) {
  */
 function renderPresence(sessions) {
     const allSessions = sessions || {};
-    console.log("[Presence] renderPresence called with sessions:", allSessions);
+    console.log("[Presence] renderPresence called - updating viewer count");
 
-    const ownSession = allSessions[viewerId];
-    if (ownSession && ownSession.status !== "offline" && !hasValidPresenceArea(ownSession)) {
-        console.warn("[Presence] Current session is missing area fields; repairing it now.");
-        updateLastSeenOnly();
-    }
-
-    // Show viewer counts without exposing viewer coordinates.
+    // Show viewer count without exposing any user locations or details
     buildPresencePanel(allSessions);
     refreshPresenceMarkers(allSessions);
 
     const activeCount = getActivePresenceEntries(allSessions).length;
-    console.log("[Presence] Active count:", activeCount);
+    console.log("[Presence] Active viewer count:", activeCount);
     updatePresenceButton(activeCount);
 }
 
@@ -2726,20 +2320,9 @@ function stopPresenceTracking() {
         presenceHeartbeat = null;
     }
 
-    if (presenceAreaHeartbeat !== null) {
-        clearInterval(presenceAreaHeartbeat);
-        presenceAreaHeartbeat = null;
-    }
-
     if (presenceCleanupHeartbeat !== null) {
         clearInterval(presenceCleanupHeartbeat);
         presenceCleanupHeartbeat = null;
-    }
-
-    // Clear geolocation watch
-    if (presenceLocationWatch !== null) {
-        navigator.geolocation.clearWatch(presenceLocationWatch);
-        presenceLocationWatch = null;
     }
 
     // Detach Firebase listeners
@@ -2775,11 +2358,10 @@ function initPresenceTracking() {
     console.log("[Presence] Created session ref for viewerId:", viewerId);
     
     setupPresenceSession(db);
-    startPresenceAreaTracking();
 }
 
 /**
- * Setup the presence session in Firebase after location is ready
+ * Setup the presence session in Firebase
  */
 function setupPresenceSession(db) {
     if (!presenceSessionRef) {
@@ -2795,16 +2377,13 @@ function setupPresenceSession(db) {
     presenceSessionStarted = true;
 
     const now = Date.now();
-    const areaFields = getPresenceAreaFields();
-    console.log("[Presence] Setting up session with area fields:", areaFields);
 
     const initialSessionData = {
         firstSeen: now,
         lastSeen: now,
         status: "online",
         displayName: viewerName || "Guest",
-        role: isAdmin ? "admin" : "member",
-        ...areaFields
+        role: isAdmin ? "admin" : "member"
     };
     
     console.log("[Presence] Updating initial session data:", initialSessionData);
@@ -2812,7 +2391,7 @@ function setupPresenceSession(db) {
     presenceSessionRef
         .update(initialSessionData)
         .then(() => {
-            console.log("[Presence] Initial session data updated successfully with location:", areaFields);
+            console.log("[Presence] Initial session data updated successfully");
         })
         .catch((err) => {
             console.error("[Presence] Failed to update initial session data:", err);
@@ -2821,18 +2400,17 @@ function setupPresenceSession(db) {
             }
         });
 
-    // Refresh lastSeen on disconnect. Do not write "offline" here because an old socket
-    // can disconnect after a newer page instance has already marked this viewer online.
+    // Refresh lastSeen on disconnect
     presenceSessionRef
         .onDisconnect()
         .update({
-            lastSeen: firebase.database.ServerValue.TIMESTAMP
+            lastSeen: Date.now()
         })
         .catch((err) => {
             console.error("[Presence] Failed to set disconnect handler:", err);
         });
 
-    // Periodic cleanup of stale sessions (older than 3 minutes - more conservative)
+    // Periodic cleanup of stale sessions (older than 3 minutes)
     presenceCleanupHeartbeat = setInterval(() => {
         const staleThreshold = Date.now() - (3 * 60 * 1000); // 3 minutes
         sessionsRef.orderByChild("lastSeen").endAt(staleThreshold).once("value", (snap) => {
@@ -2871,7 +2449,7 @@ function setupPresenceSession(db) {
         const allSessions = snap.val() || {};
         console.log("[Presence] Real-time listener update. Active sessions:", Object.keys(allSessions).length);
         
-        // Render presence with real-time updates to circles
+        // Render presence with real-time updates
         renderPresence(allSessions);
         
         // Mark the time we last received a session update
@@ -2898,24 +2476,11 @@ function setupPresenceSession(db) {
             console.log("[Visibility] Page became hidden - marking as offline");
             stopPolling();
             
-            // Clear geolocation watch when hidden to save battery
-            if (presenceLocationWatch !== null) {
-                navigator.geolocation.clearWatch(presenceLocationWatch);
-                presenceLocationWatch = null;
-                console.log("[Visibility] Geolocation watch stopped");
-            }
-            
             // Clear heartbeat when hidden
             if (presenceHeartbeat !== null) {
                 clearInterval(presenceHeartbeat);
                 presenceHeartbeat = null;
                 console.log("[Visibility] Heartbeat stopped");
-            }
-
-            if (presenceAreaHeartbeat !== null) {
-                clearInterval(presenceAreaHeartbeat);
-                presenceAreaHeartbeat = null;
-                console.log("[Visibility] Area heartbeat stopped");
             }
 
             presenceSessionRef
@@ -2934,9 +2499,8 @@ function setupPresenceSession(db) {
                     console.warn("[Visibility] Failed to mark online:", err);
                 });
 
-            // Restart polling and geolocation when page becomes visible
+            // Restart polling when page becomes visible
             startPolling();
-            startPresenceAreaTracking();
             
             // Restore user marker if needed
             try {
