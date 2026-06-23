@@ -455,6 +455,13 @@ localStorage.setItem("viewerName", viewerName);
 
 let viewerLocation = null;
 
+const DEFAULT_PRESENCE_AREA = {
+    areaLat: 12.5,
+    areaLon: 122.5,
+    areaKey: "default",
+    areaName: "Philippines"
+};
+
 function getActivePresenceEntries(sessions) {
     const cutoff = Date.now() - PRESENCE_SESSION_TIMEOUT_MS;
     const result = Object.entries(sessions || {}).filter(([id, s]) => {
@@ -544,8 +551,9 @@ function getPresenceAreaFromSession(session) {
         console.log("[Presence] Found region by areaKey:", session.areaKey, "->", region);
     }
 
-    const rawCircleLat = session.areaLat ?? region?.center[0] ?? session.lat;
-    const rawCircleLon = session.areaLon ?? region?.center[1] ?? session.lon;
+    const fallbackArea = DEFAULT_PRESENCE_AREA;
+    const rawCircleLat = session.areaLat ?? region?.center[0] ?? session.lat ?? fallbackArea.areaLat;
+    const rawCircleLon = session.areaLon ?? region?.center[1] ?? session.lon ?? fallbackArea.areaLon;
     const circleLat = Number(rawCircleLat);
     const circleLon = Number(rawCircleLon);
     
@@ -556,8 +564,8 @@ function getPresenceAreaFromSession(session) {
         const result = {
             areaLat: circleLat,
             areaLon: circleLon,
-            areaKey: region?.key ?? `${circleLat.toFixed(2)},${circleLon.toFixed(2)}`,
-            areaName: session.areaName || region?.name || "Unknown Area"
+            areaKey: region?.key ?? session.areaKey ?? fallbackArea.areaKey,
+            areaName: session.areaName || region?.name || fallbackArea.areaName
         };
         console.log("[Presence] getPresenceAreaFromSession returning:", result);
         return result;
@@ -568,22 +576,28 @@ function getPresenceAreaFromSession(session) {
 }
 
 function getPresenceAreaFields() {
-    if (!viewerLocation) {
-        // Use default area (center of Philippines) while waiting for geolocation
-        return {
-            areaLat: 12.5,
-            areaLon: 122.5,
-            areaKey: "default",
-            areaName: "Philippines"
-        };
+    if (!viewerLocation) return { ...DEFAULT_PRESENCE_AREA };
+
+    const areaLat = Number(viewerLocation.areaLat);
+    const areaLon = Number(viewerLocation.areaLon);
+    if (!Number.isFinite(areaLat) || !Number.isFinite(areaLon) || !viewerLocation.areaKey) {
+        return { ...DEFAULT_PRESENCE_AREA };
     }
 
     return {
-        areaLat: viewerLocation.areaLat,
-        areaLon: viewerLocation.areaLon,
+        areaLat,
+        areaLon,
         areaKey: viewerLocation.areaKey,
-        areaName: viewerLocation.areaName
+        areaName: viewerLocation.areaName || DEFAULT_PRESENCE_AREA.areaName
     };
+}
+
+function hasValidPresenceArea(session) {
+    return !!session
+        && Number.isFinite(Number(session.areaLat))
+        && Number.isFinite(Number(session.areaLon))
+        && typeof session.areaKey === "string"
+        && session.areaKey.length > 0;
 }
 
 function getPresenceStatusFields(status = "online") {
@@ -2653,6 +2667,8 @@ let presenceAllRef = null;
 let presenceHeartbeat = null;
 let presenceAreaHeartbeat = null;
 let presenceLocationWatch = null;
+let presenceSessionStarted = false;
+let presenceCleanupHeartbeat = null;
 
 /**
  * Render the presence list into the panel and update the count button.
@@ -2682,6 +2698,12 @@ function renderPresence(sessions) {
     const allSessions = sessions || {};
     console.log("[Presence] renderPresence called with sessions:", allSessions);
 
+    const ownSession = allSessions[viewerId];
+    if (ownSession && ownSession.status !== "offline" && !hasValidPresenceArea(ownSession)) {
+        console.warn("[Presence] Current session is missing area fields; repairing it now.");
+        updateLastSeenOnly();
+    }
+
     // Show viewer counts without exposing viewer coordinates.
     buildPresencePanel(allSessions);
     refreshPresenceMarkers(allSessions);
@@ -2709,6 +2731,11 @@ function stopPresenceTracking() {
         presenceAreaHeartbeat = null;
     }
 
+    if (presenceCleanupHeartbeat !== null) {
+        clearInterval(presenceCleanupHeartbeat);
+        presenceCleanupHeartbeat = null;
+    }
+
     // Clear geolocation watch
     if (presenceLocationWatch !== null) {
         navigator.geolocation.clearWatch(presenceLocationWatch);
@@ -2727,6 +2754,7 @@ function stopPresenceTracking() {
         }
     });
     presenceMarkers.clear();
+    presenceSessionStarted = false;
 
     console.log("[Presence] Presence tracking stopped");
 }
@@ -2746,41 +2774,8 @@ function initPresenceTracking() {
     presenceSessionRef = db.ref("sessions/" + viewerId);
     console.log("[Presence] Created session ref for viewerId:", viewerId);
     
-    // START location tracking FIRST before creating session
-    console.log("[Presence] Starting geolocation before session creation");
-    
-    // Get initial position (will call setupPresenceSession when ready)
-    if (!navigator.geolocation) {
-        console.warn("[Presence] Geolocation not available - creating session with default location");
-        setupPresenceSession(db);
-        return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            console.log("[Presence] Got initial position before session:", {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy
-            });
-            // Update viewerLocation with actual coordinates
-            viewerLocation = getPresenceAreaFromCoords(position.coords.latitude, position.coords.longitude);
-            console.log("[Presence] Viewer location resolved:", viewerLocation);
-            setupPresenceSession(db);
-            startPresenceAreaTracking();
-        },
-        (err) => {
-            console.warn("[Presence] Initial geolocation failed, creating session with default area:", err);
-            setupPresenceSession(db);
-            // Still try to track for future updates
-            startPresenceAreaTracking();
-        },
-        {
-            enableHighAccuracy: false,
-            maximumAge: 60000,
-            timeout: 15000
-        }
-    );
+    setupPresenceSession(db);
+    startPresenceAreaTracking();
 }
 
 /**
@@ -2792,11 +2787,17 @@ function setupPresenceSession(db) {
         return;
     }
 
+    if (presenceSessionStarted) {
+        console.log("[Presence] Session already started; skipping duplicate setup");
+        updateLastSeenOnly();
+        return;
+    }
+    presenceSessionStarted = true;
+
     const now = Date.now();
     const areaFields = getPresenceAreaFields();
     console.log("[Presence] Setting up session with area fields:", areaFields);
 
-    // Set initial session data with proper error handling
     const initialSessionData = {
         firstSeen: now,
         lastSeen: now,
@@ -2806,33 +2807,33 @@ function setupPresenceSession(db) {
         ...areaFields
     };
     
-    console.log("[Presence] Setting initial session data:", initialSessionData);
+    console.log("[Presence] Updating initial session data:", initialSessionData);
     
     presenceSessionRef
-        .set(initialSessionData)
+        .update(initialSessionData)
         .then(() => {
-            console.log("[Presence] Initial session data set successfully with location:", areaFields);
+            console.log("[Presence] Initial session data updated successfully with location:", areaFields);
         })
         .catch((err) => {
-            console.error("[Presence] Failed to set initial session data:", err);
+            console.error("[Presence] Failed to update initial session data:", err);
             if (err.code === 'PERMISSION_DENIED') {
                 console.error('[Presence] Permission denied - check Firebase Rules');
             }
         });
 
-    // Ensure status switches to offline on disconnect with error handling
+    // Refresh lastSeen on disconnect. Do not write "offline" here because an old socket
+    // can disconnect after a newer page instance has already marked this viewer online.
     presenceSessionRef
         .onDisconnect()
         .update({
-            lastSeen: Date.now(),
-            status: "offline"
+            lastSeen: firebase.database.ServerValue.TIMESTAMP
         })
         .catch((err) => {
             console.error("[Presence] Failed to set disconnect handler:", err);
         });
 
     // Periodic cleanup of stale sessions (older than 3 minutes - more conservative)
-    setInterval(() => {
+    presenceCleanupHeartbeat = setInterval(() => {
         const staleThreshold = Date.now() - (3 * 60 * 1000); // 3 minutes
         sessionsRef.orderByChild("lastSeen").endAt(staleThreshold).once("value", (snap) => {
             const staleSessions = snap.val() || {};
@@ -2919,11 +2920,10 @@ function setupPresenceSession(db) {
 
             presenceSessionRef
                 .update({
-                    lastSeen: Date.now(),
-                    status: "offline"
+                    lastSeen: Date.now()
                 })
                 .catch((err) => {
-                    console.warn("[Visibility] Failed to mark offline:", err);
+                    console.warn("[Visibility] Failed to refresh lastSeen before hiding:", err);
                 });
         } else {
             console.log("[Visibility] Page became visible - resuming presence tracking");
