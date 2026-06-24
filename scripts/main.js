@@ -560,8 +560,7 @@ function getChatDisplayName() {
     if (isAdmin) {
         return "Official Developer";
     }
-    const areaName = viewerLocation?.areaName || "Surigao City";
-    return `${areaName}: Person ${chatPersonaNumber}`;
+    return `Person ${chatPersonaNumber}`;
 }
 
 function getChatAvatarLetter(label) {
@@ -676,6 +675,13 @@ function renderChatMessages(snapshot) {
 
         return isOwnMessage ? ownMessageMarkup : otherMessageMarkup;
     }).join("");
+    
+    // Auto-scroll to latest message
+    setTimeout(() => {
+        if (chatMessages) {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    }, 0);
 }
 
 function setChatStatus(message, type = "info") {
@@ -835,13 +841,17 @@ function watchChatUpdates() {
     chatRef.limitToLast(50).on("value", (snapshot) => {
         renderChatMessages(snapshot);
         if (snapshot.exists()) {
-            setChatStatus("Connected to chat.", "success");
+            // Hide status when messages load successfully
+            if (chatStatus) chatStatus.style.display = 'none';
         } else {
-            setChatStatus("No messages yet. Connected.", "info");
+            // Show status only if no messages yet
+            if (chatStatus) chatStatus.style.display = 'block';
+            setChatStatus("No messages yet. Start the conversation.", "info");
         }
         removeExpiredChatMessages();
     }, (error) => {
         console.error("Chat read failed:", error);
+        if (chatStatus) chatStatus.style.display = 'block';
         setChatStatus("Unable to load chat. Please refresh.", "error");
     });
 }
